@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "ALw9a9AyxMM=",
+  "dgSpecHash": "YihUVGetxcY=",
   "success": true,
-  "projectFilePath": "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
+  "projectFilePath": "/Users/Raheem/Desktop/repo/Untitled/FYP_AutomationSystem.csproj",
   "expectedPackageFiles": [
     "/Users/Raheem/.nuget/packages/humanizer.core/2.14.1/humanizer.core.2.14.1.nupkg.sha512",
     "/Users/Raheem/.nuget/packages/microsoft.aspnetcore.app.internal.assets/10.0.3/microsoft.aspnetcore.app.internal.assets.10.0.3.nupkg.sha512",
@@ -43,9 +43,9 @@
       "code": "NU1510",
       "level": "Warning",
       "message": "PackageReference Microsoft.AspNetCore.Components.Authorization will not be pruned. Consider removing this package from your dependencies, as it is likely unnecessary.",
-      "projectPath": "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
+      "projectPath": "/Users/Raheem/Desktop/repo/Untitled/FYP_AutomationSystem.csproj",
       "warningLevel": 1,
-      "filePath": "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
+      "filePath": "/Users/Raheem/Desktop/repo/Untitled/FYP_AutomationSystem.csproj",
       "libraryId": "Microsoft.AspNetCore.Components.Authorization",
       "targetGraphs": [
         "net10.0"
