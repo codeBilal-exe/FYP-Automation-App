@@ -1,19 +1,60 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject NotificationService NotificationService
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="app-shell">
+    <AuthorizeView>
+        <Authorized>
+            <aside class="app-sidebar @(_collapsed ? "collapsed" : "")">
+                <div class="brand">
+                    <i class="bi bi-mortarboard-fill"></i>
+                    <span class="brand-text">FYP System</span>
+                </div>
+                <NavMenu Role="@_role" />
+                <div class="sidebar-footer">
+                    <button class="btn btn-sm btn-collapse" @onclick="ToggleSidebar" title="Collapse">
+                        <i class="bi @(_collapsed ? "bi-chevron-double-right" : "bi-chevron-double-left")"></i>
+                    </button>
+                </div>
+            </aside>
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+            <div class="app-main">
+                <header class="app-topbar">
+                    <button class="btn btn-link d-lg-none p-0 me-2" @onclick="ToggleSidebar"><i class="bi bi-list fs-4"></i></button>
+                    <div class="topbar-title">@_pageTitle</div>
+                    <div class="topbar-actions">
+                        <a class="btn btn-link position-relative me-2" href="/notifications" title="Notifications">
+                            <i class="bi bi-bell fs-5"></i>
+                            @if (_unread > 0)
+                            {
+                                <span class="badge rounded-pill bg-danger badge-pulse">@_unread</span>
+                            }
+                        </a>
+                        <div class="user-chip">
+                            <div class="avatar">@GetInitials(context.User.Identity?.Name)</div>
+                            <div class="d-none d-md-block">
+                                <div class="user-name">@context.User.Identity?.Name</div>
+                                <div class="user-role"><span class="role-badge">@_role</span></div>
+                            </div>
+                        </div>
+                        <a class="btn btn-link ms-2 logout-btn" href="/auth/logout" title="Logout">
+                            <i class="bi bi-box-arrow-right fs-5"></i>
+                        </a>
+                    </div>
+                </header>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
+                <main class="app-content page-enter" @key="Nav.Uri">
+                    @Body
+                </main>
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <main class="app-content-public page-enter">
+                @Body
+            </main>
+        </NotAuthorized>
+    </AuthorizeView>
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -21,3 +62,50 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool _collapsed;
+    private string _role = "";
+    private int _unread;
+    private string _pageTitle = "Dashboard";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        var user = state.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+            if (AuthService.CurrentUser != null)
+            {
+                _unread = await NotificationService.CountUnread(AuthService.CurrentUser.Id);
+            }
+        }
+        Nav.LocationChanged += OnLocationChanged;
+        UpdateTitle(Nav.Uri);
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        UpdateTitle(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateTitle(string uri)
+    {
+        var path = new Uri(uri).AbsolutePath.Trim('/');
+        if (string.IsNullOrEmpty(path)) { _pageTitle = "Dashboard"; return; }
+        _pageTitle = string.Join(" / ", path.Split('/').Select(s => char.ToUpper(s[0]) + s.Substring(1).Replace("-", " ")));
+    }
+
+    private void ToggleSidebar() => _collapsed = !_collapsed;
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 1 ? parts[0].Substring(0, 1).ToUpper() : (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper();
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

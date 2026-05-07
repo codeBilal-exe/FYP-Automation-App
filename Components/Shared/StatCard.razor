@@ -1,0 +1,19 @@
+@inject IJSRuntime JS
+<div class="stat-card lift">
+  <div class="stat-icon @IconClass"><i class="bi @Icon"></i></div>
+  <div>
+    <div class="stat-value" @ref="_el">0</div>
+    <div class="stat-label">@Label</div>
+  </div>
+</div>
+@code {
+  [Parameter] public string Icon { get; set; } = "bi-bar-chart";
+  [Parameter] public string IconClass { get; set; } = "";
+  [Parameter] public string Label { get; set; } = "";
+  [Parameter] public int Value { get; set; }
+  private ElementReference _el;
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (firstRender) await JS.InvokeVoidAsync("fypSite.countUp", _el, Value);
+  }
+}

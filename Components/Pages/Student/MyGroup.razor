@@ -1,0 +1,66 @@
+@page "/student/group"
+@attribute [Authorize(Roles = "Student")]
+@inject AppDbContext Db
+
+<div class="page-header"><div><h1>My Group</h1><div class="page-subtitle">Your project group and supervisor.</div></div></div>
+
+@if (_group == null) { <div class="empty-state"><i class="bi bi-people"></i>You are not in a group yet.</div> }
+else
+{
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-diagram-3"></i> @_group.GroupName</div>
+        @if (_group.Project != null)
+        {
+          <div class="mb-3">
+            <div><strong>Project:</strong> @_group.Project.Title</div>
+            <div class="text-muted small">@_group.Project.Description</div>
+            <div class="small mt-1"><span class="fbadge active">@_group.Project.Status</span></div>
+          </div>
+        }
+        <h6 class="text-muted text-uppercase small mt-3">Members</h6>
+        @foreach (var m in _group.Members)
+        {
+          <div class="d-flex align-items-center gap-3 py-2 border-bottom">
+            <div class="avatar">@Initials(m.FullName)</div>
+            <div><div class="fw-semibold">@m.FullName</div><div class="small text-muted">@m.Email</div></div>
+          </div>
+        }
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-person-badge"></i> Supervisor</div>
+        @if (_group.Supervisor != null)
+        {
+          <div class="d-flex align-items-center gap-3">
+            <div class="avatar" style="width:54px;height:54px;font-size:1.1rem">@Initials(_group.Supervisor.FullName)</div>
+            <div>
+              <div class="fw-semibold">@_group.Supervisor.FullName</div>
+              <div class="small text-muted">@_group.Supervisor.Email</div>
+              @if (!string.IsNullOrEmpty(_group.Supervisor.Expertise))
+              { <div class="small mt-1"><span class="fbadge info">@_group.Supervisor.Expertise</span></div> }
+            </div>
+          </div>
+        }
+        else { <div class="text-muted small">No supervisor assigned.</div> }
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  private Group? _group;
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _group = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Supervisor).Include(g => g.Project),
+        g => g.Members.Any(m => m.Id == u.Id));
+  }
+  private static string Initials(string n) {
+    var p = n.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    return p.Length == 1 ? p[0].Substring(0,1).ToUpper() : (p[0][0].ToString()+p[^1][0].ToString()).ToUpper();
+  }
+}

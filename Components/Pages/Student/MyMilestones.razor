@@ -1,0 +1,89 @@
+@page "/student/milestones"
+@attribute [Authorize(Roles = "Student")]
+@inject AppDbContext Db
+@inject MilestoneService MilestoneService
+
+<div class="page-header">
+  <div><h1>My Milestones</h1><div class="page-subtitle">Track and update your project milestones.</div></div>
+</div>
+
+@if (_loading) { <LoadingSpinner /> }
+else if (_project == null) { <div class="empty-state"><i class="bi bi-inbox"></i>You are not assigned to a project yet.</div> }
+else
+{
+  <div class="fcard mb-3">
+    <div class="d-flex align-items-center justify-content-between">
+      <div><strong>@_project.Title</strong><div class="text-muted small">@_project.Description</div></div>
+      <span class="text-muted small">Overall: @_overall%</span>
+    </div>
+    <ProgressBar Value="@_overall" />
+  </div>
+
+  <div class="fcard">
+    <div class="fcard-title"><i class="bi bi-flag"></i> Milestones</div>
+    <div class="timeline">
+      @foreach (var m in _milestones.OrderBy(m => m.DueDate))
+      {
+        <div class="timeline-item @StatusClass(m.Status)">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">@m.Title</div>
+              <div class="small text-muted">@m.Description</div>
+              <div class="small text-muted">Due @m.DueDate.ToString("MMM dd, yyyy")</div>
+            </div>
+            <span class="fbadge @StatusClass(m.Status)">@m.Status</span>
+          </div>
+          <div class="mt-2 d-flex align-items-center gap-2">
+            <input type="range" class="form-range flex-grow-1" min="0" max="100" step="5"
+              value="@m.ProgressPercent" @onchange="@(e => UpdateProgress(m, e))" />
+            <span class="small fw-semibold" style="min-width:40px;text-align:right">@m.ProgressPercent%</span>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+@code {
+  private bool _loading = true;
+  private Project? _project;
+  private List<Milestone> _milestones = new();
+  private int _overall;
+
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    var grp = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Project), g => g.Members.Any(m => m.Id == u.Id));
+    _project = grp?.Project;
+    if (_project != null)
+    {
+      _milestones = await MilestoneService.GetMilestonesByProjectAsync(_project.Id);
+      Recalc();
+    }
+    _loading = false;
+  }
+
+  private async Task UpdateProgress(Milestone m, ChangeEventArgs e)
+  {
+    if (int.TryParse(e.Value?.ToString(), out var v))
+    {
+      m.ProgressPercent = v;
+      if (v >= 100) m.Status = MilestoneStatus.Completed;
+      else if (v > 0) m.Status = MilestoneStatus.InProgress;
+      else m.Status = MilestoneStatus.Pending;
+      await MilestoneService.UpdateMilestoneAsync(m);
+      Recalc();
+    }
+  }
+
+  private void Recalc() => _overall = _milestones.Count == 0 ? 0 : (int)_milestones.Average(m => m.ProgressPercent);
+
+  private static string StatusClass(MilestoneStatus s) => s switch
+  {
+    MilestoneStatus.Completed => "completed",
+    MilestoneStatus.InProgress => "active",
+    MilestoneStatus.Overdue => "overdue",
+    _ => "pending"
+  };
+}

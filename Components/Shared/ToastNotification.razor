@@ -1,0 +1,17 @@
+<div class="toast-container">
+  @foreach (var t in _toasts)
+  {
+    <div class="toast-item @t.Type"><strong>@t.Title</strong><div>@t.Message</div></div>
+  }
+</div>
+@code {
+  public record Toast(string Title, string Message, string Type);
+  private List<Toast> _toasts = new();
+  public void Show(string title, string message, string type = "info")
+  {
+    var t = new Toast(title, message, type);
+    _toasts.Add(t);
+    StateHasChanged();
+    _ = Task.Delay(3500).ContinueWith(_ => InvokeAsync(() => { _toasts.Remove(t); StateHasChanged(); }));
+  }
+}

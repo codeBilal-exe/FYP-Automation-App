@@ -1,0 +1,43 @@
+@page "/notifications"
+@attribute [Authorize]
+@inject NotificationService NotificationService
+
+<div class="page-header"><div><h1>Notifications</h1><div class="page-subtitle">All your alerts in one place.</div></div>
+  <button class="btn btn-soft" @onclick="MarkAll"><i class="bi bi-check2-all me-1"></i>Mark all read</button>
+</div>
+
+<div class="fcard">
+  @if (!_items.Any()) { <div class="empty-state"><i class="bi bi-bell-slash"></i>No notifications.</div> }
+  else
+  {
+    @foreach (var n in _items)
+    {
+      <div class="py-2 border-bottom d-flex justify-content-between align-items-start">
+        <div>
+          <div class="d-flex align-items-center gap-2"><strong>@n.Title</strong><span class="fbadge @TypeClass(n.Type)">@n.Type</span></div>
+          <div class="text-muted small">@n.Message</div>
+          <div class="text-muted small">@n.CreatedAt.ToString("MMM dd, HH:mm")</div>
+        </div>
+        @if (!n.IsRead) { <button class="btn btn-sm btn-soft" @onclick="() => MarkOne(n)"><i class="bi bi-check"></i></button> }
+      </div>
+    }
+  }
+</div>
+
+@code {
+  private List<Notification> _items = new();
+  protected override async Task OnInitializedAsync() => await Load();
+  private async Task Load()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _items = await NotificationService.GetNotificationsByUser(u.Id);
+  }
+  private async Task MarkOne(Notification n) { await NotificationService.MarkAsRead(n.Id); await Load(); }
+  private async Task MarkAll() { var u = AuthService.CurrentUser; if (u != null) { await NotificationService.MarkAllAsRead(u.Id); await Load(); } }
+  private static string TypeClass(NotificationType t) => t switch {
+    NotificationType.Success => "completed",
+    NotificationType.Warning => "warning",
+    NotificationType.Deadline => "danger",
+    _ => "info"
+  };
+}

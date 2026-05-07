@@ -1,0 +1,85 @@
+@page "/admin/groups"
+@attribute [Authorize(Roles = "Admin,HOD,Coordinator")]
+@inject AppDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>Manage Groups</h1><div class="page-subtitle">Create groups and assign supervisors.</div></div>
+  <button class="btn btn-primary" @onclick="() => _show = true"><i class="bi bi-plus-lg me-1"></i>New Group</button>
+</div>
+
+<div class="fcard">
+  <table class="ftable">
+    <thead><tr><th>Name</th><th>Supervisor</th><th>Members</th><th>Project</th></tr></thead>
+    <tbody>
+      @foreach (var g in _groups)
+      {
+        <tr>
+          <td>@g.GroupName</td>
+          <td>@(g.Supervisor?.FullName ?? "—")</td>
+          <td>@g.Members.Count</td>
+          <td>@(g.Project?.Title ?? "—")</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+@if (_show)
+{
+  <div class="modal-backdrop-c" @onclick="() => _show = false">
+    <div class="modal-card" @onclick:stopPropagation>
+      <h5>New Group</h5>
+      <div class="mb-2"><label class="form-label">Group Name</label><input class="form-control" @bind="_name" /></div>
+      <div class="mb-2"><label class="form-label">Supervisor</label>
+        <select class="form-select" @bind="_supId">
+          <option value="0">— Select —</option>
+          @foreach (var s in _supervisors) { <option value="@s.Id">@s.FullName</option> }
+        </select>
+      </div>
+      <div class="mb-3"><label class="form-label">Members</label>
+        <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem">
+          @foreach (var s in _students)
+          {
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="m@(s.Id)" checked="@_pick.Contains(s.Id)" @onchange="@(e => Toggle(s.Id, e))" />
+              <label class="form-check-label" for="m@(s.Id)">@s.FullName</label>
+            </div>
+          }
+        </div>
+      </div>
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-light" @onclick="() => _show = false">Cancel</button>
+        <button class="btn btn-primary" @onclick="Create">Create</button>
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  private List<Group> _groups = new();
+  private List<User> _supervisors = new();
+  private List<User> _students = new();
+  private bool _show;
+  private string _name = "";
+  private int _supId;
+  private HashSet<int> _pick = new();
+
+  protected override async Task OnInitializedAsync() => await Load();
+  private async Task Load()
+  {
+    _groups = await Db.Groups.Include(g => g.Supervisor).Include(g => g.Members).Include(g => g.Project).ToListAsync();
+    _supervisors = await Db.Users.Where(u => u.Role == UserRole.Supervisor && u.IsActive).ToListAsync();
+    _students = await Db.Users.Where(u => u.Role == UserRole.Student && u.IsActive).ToListAsync();
+  }
+  private void Toggle(int id, ChangeEventArgs e) { if ((bool?)e.Value == true) _pick.Add(id); else _pick.Remove(id); }
+  private async Task Create()
+  {
+    if (string.IsNullOrWhiteSpace(_name) || _supId == 0) return;
+    var members = await Db.Users.Where(u => _pick.Contains(u.Id)).ToListAsync();
+    Db.Groups.Add(new Group { GroupName = _name, SupervisorId = _supId, CreatedAt = DateTime.UtcNow, Members = members });
+    await Db.SaveChangesAsync();
+    _show = false; _name = ""; _supId = 0; _pick.Clear();
+    await Load();
+  }
+}

@@ -1,0 +1,108 @@
+@attribute [Authorize(Roles = "Student")]
+@inject AppDbContext Db
+@inject ProposalService ProposalService
+@inject MilestoneService MilestoneService
+@inject NotificationService NotificationService
+@inject DocumentService DocumentService
+
+<div class="page-header">
+  <div>
+    <h1>Welcome back, @(_userName)</h1>
+    <div class="page-subtitle">Here is what's happening with your project.</div>
+  </div>
+</div>
+
+@if (_loading) { <LoadingSpinner Message="Loading dashboard…" /> }
+else
+{
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-flag" Label="My Milestones" Value="@_milestones.Count" /></div>
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-list-task" IconClass="warning" Label="Pending Tasks" Value="@_pending" /></div>
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-folder2-open" IconClass="info" Label="Documents" Value="@_docCount" /></div>
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-award" IconClass="success" Label="My Grade" Value="@_grade" /></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-graph-up"></i> Project Progress</div>
+        @if (_overall == 0) { <div class="empty-state"><i class="bi bi-inbox"></i>No milestones yet.</div> }
+        else
+        {
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <strong>@(_project?.Title ?? "—")</strong>
+            <span class="text-muted small">@_overall% complete</span>
+          </div>
+          <ProgressBar Value="@_overall" />
+          <div class="mt-3">
+            @foreach (var m in _milestones.OrderBy(m => m.DueDate).Take(4))
+            {
+              <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div>
+                  <div class="fw-semibold">@m.Title</div>
+                  <div class="small text-muted">Due @m.DueDate.ToString("MMM dd, yyyy")</div>
+                </div>
+                <span class="fbadge @StatusClass(m.Status)">@m.Status</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-bell"></i> Recent Notifications</div>
+        @if (!_notifications.Any()) { <div class="empty-state"><i class="bi bi-bell-slash"></i>No notifications.</div> }
+        else
+        {
+          @foreach (var n in _notifications.Take(5))
+          {
+            <div class="py-2 border-bottom">
+              <div class="d-flex justify-content-between"><strong>@n.Title</strong><span class="small text-muted">@n.CreatedAt.ToString("MMM dd")</span></div>
+              <div class="text-muted small">@n.Message</div>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  private bool _loading = true;
+  private string _userName = "";
+  private List<Milestone> _milestones = new();
+  private List<Notification> _notifications = new();
+  private Project? _project;
+  private int _pending, _docCount, _grade, _overall;
+
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _userName = u.FullName;
+
+    var group = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Project), g => g.Members.Any(m => m.Id == u.Id));
+    if (group?.Project != null)
+    {
+      _project = group.Project;
+      _milestones = await MilestoneService.GetMilestonesByProjectAsync(_project.Id);
+      _pending = _milestones.Count(m => m.Status != MilestoneStatus.Completed);
+      _docCount = (await DocumentService.GetDocumentsByProject(_project.Id)).Count;
+      var ev = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+        .FirstOrDefaultAsync(Db.Evaluations.Where(e => e.ProjectId == _project.Id && e.IsLocked));
+      _grade = ev != null ? (int)ev.TotalScore : 0;
+      _overall = _milestones.Count == 0 ? 0 : (int)_milestones.Average(m => m.ProgressPercent);
+    }
+    _notifications = await NotificationService.GetNotificationsByUser(u.Id);
+    _loading = false;
+  }
+
+  private string StatusClass(MilestoneStatus s) => s switch
+  {
+    MilestoneStatus.Completed => "completed",
+    MilestoneStatus.InProgress => "active",
+    MilestoneStatus.Overdue => "overdue",
+    _ => "pending"
+  };
+}

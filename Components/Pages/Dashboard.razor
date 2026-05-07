@@ -1,0 +1,33 @@
+@page "/dashboard"
+@attribute [Authorize]
+@inject AuthenticationStateProvider AuthProvider
+
+@if (_role == "Student")
+{
+  <FYP_AutomationSystem.Components.Pages.Student.StudentDashboard />
+}
+else if (_role == "Supervisor")
+{
+  <FYP_AutomationSystem.Components.Pages.Supervisor.SupervisorDashboard />
+}
+else if (_role == "Admin" || _role == "HOD" || _role == "Coordinator")
+{
+  <FYP_AutomationSystem.Components.Pages.Admin.AdminDashboard />
+}
+else if (_role == "Panel")
+{
+  <FYP_AutomationSystem.Components.Pages.Supervisor.SupervisorDashboard />
+}
+else
+{
+  <p>Loading…</p>
+}
+
+@code {
+  private string _role = "";
+  protected override async Task OnInitializedAsync()
+  {
+    var s = await AuthProvider.GetAuthenticationStateAsync();
+    _role = s.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+  }
+}

@@ -1,0 +1,56 @@
+@page "/supervisor/progress"
+@attribute [Authorize(Roles = "Supervisor")]
+@inject AppDbContext Db
+@inject MilestoneService MilestoneService
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header"><div><h1>Track Progress</h1><div class="page-subtitle">Monitor milestone progress across your groups.</div></div></div>
+
+@if (!_groups.Any()) { <div class="empty-state"><i class="bi bi-diagram-3"></i>No groups assigned.</div> }
+else
+{
+  @foreach (var g in _groups)
+  {
+    var ms = _milestones.GetValueOrDefault(g.Project?.Id ?? 0, new List<Milestone>());
+    var avg = ms.Count == 0 ? 0 : (int)ms.Average(m => m.ProgressPercent);
+    <div class="fcard mb-3 lift">
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <strong>@g.GroupName</strong>
+          <div class="text-muted small">@(g.Project?.Title ?? "No project")</div>
+        </div>
+        <span class="fbadge info">@avg% complete</span>
+      </div>
+      <ProgressBar Value="@avg" />
+      <div class="row g-2 mt-3">
+        @foreach (var m in ms.OrderBy(m => m.DueDate))
+        {
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between p-2" style="background:#f8fafc;border-radius:8px">
+              <div><div class="fw-semibold small">@m.Title</div><div class="small text-muted">Due @m.DueDate.ToString("MMM dd")</div></div>
+              <span class="fbadge @StatusClass(m.Status)">@m.ProgressPercent%</span>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+}
+
+@code {
+  private List<Group> _groups = new();
+  private Dictionary<int, List<Milestone>> _milestones = new();
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _groups = await Db.Groups.Include(g => g.Project).Where(g => g.SupervisorId == u.Id).ToListAsync();
+    foreach (var g in _groups.Where(g => g.Project != null))
+      _milestones[g.Project!.Id] = await MilestoneService.GetMilestonesByProjectAsync(g.Project.Id);
+  }
+  private static string StatusClass(MilestoneStatus s) => s switch {
+    MilestoneStatus.Completed => "completed",
+    MilestoneStatus.InProgress => "active",
+    MilestoneStatus.Overdue => "overdue",
+    _ => "pending"
+  };
+}

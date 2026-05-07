@@ -1,0 +1,42 @@
+@page "/supervisor/groups"
+@attribute [Authorize(Roles = "Supervisor")]
+@inject AppDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header"><div><h1>My Groups</h1><div class="page-subtitle">Groups assigned to you.</div></div></div>
+
+@if (!_groups.Any()) { <div class="empty-state"><i class="bi bi-people"></i>No groups assigned.</div> }
+else
+{
+  <div class="row g-3">
+    @foreach (var g in _groups)
+    {
+      <div class="col-md-6">
+        <div class="fcard lift">
+          <div class="d-flex justify-content-between align-items-start">
+            <div><strong>@g.GroupName</strong><div class="text-muted small">@(g.Project?.Title ?? "No project")</div></div>
+            <span class="fbadge @(g.Project?.Status.ToString().ToLower() ?? "pending")">@(g.Project?.Status.ToString() ?? "—")</span>
+          </div>
+          <hr/>
+          <div class="text-muted small text-uppercase mb-2">Members</div>
+          @foreach (var m in g.Members)
+          {
+            <div class="d-flex align-items-center gap-2 py-1">
+              <div class="avatar" style="width:30px;height:30px;font-size:.7rem">@(string.IsNullOrEmpty(m.FullName)?"?":m.FullName[0].ToString())</div>
+              <div class="small">@m.FullName <span class="text-muted">— @m.Email</span></div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}
+
+@code {
+  private List<Group> _groups = new();
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _groups = await Db.Groups.Include(g => g.Members).Include(g => g.Project).Where(g => g.SupervisorId == u.Id).ToListAsync();
+  }
+}

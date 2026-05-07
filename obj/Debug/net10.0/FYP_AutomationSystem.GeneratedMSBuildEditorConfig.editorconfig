@@ -19,57 +19,157 @@ build_property.TargetFrameworkIdentifier = .NETCoreApp
 build_property.TargetFrameworkVersion = v10.0
 build_property.RootNamespace = FYP_AutomationSystem
 build_property.RootNamespace = FYP_AutomationSystem
-build_property.ProjectDir = /Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/
+build_property.ProjectDir = /Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.RazorLangVersion = 9.0
 build_property.SupportLocalizedComponentNames = 
 build_property.GenerateRazorMetadataSourceChecksumAttributes = 
-build_property.MSBuildProjectDirectory = /Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem
+build_property.MSBuildProjectDirectory = /Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem
 build_property._RazorSourceGeneratorDebug = 
 build_property.EffectiveAnalysisLevelStyle = 10.0
 build_property.EnableCodeStyleSeverity = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/App.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/App.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9BcHAucmF6b3I=
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Pages/Counter.razor]
-build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9Db3VudGVyLnJhem9y
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Admin/AdminDashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BZG1pbi9BZG1pbkRhc2hib2FyZC5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Pages/Error.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Admin/AuditLogs.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BZG1pbi9BdWRpdExvZ3MucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Admin/ManageGroups.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BZG1pbi9NYW5hZ2VHcm91cHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Admin/ManageUsers.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BZG1pbi9NYW5hZ2VVc2Vycy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Admin/Reports.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BZG1pbi9SZXBvcnRzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Admin/VivaScheduling.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BZG1pbi9WaXZhU2NoZWR1bGluZy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Auth/Login.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9BdXRoL0xvZ2luLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Dashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9EYXNoYm9hcmQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Error.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9FcnJvci5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Pages/Home.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Home.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9Ib21lLnJhem9y
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Pages/NotFound.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/NotFound.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9Ob3RGb3VuZC5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Pages/Weather.razor]
-build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9XZWF0aGVyLnJhem9y
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Shared/MessageCenter.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TaGFyZWQvTWVzc2FnZUNlbnRlci5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Routes.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Shared/Notifications.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TaGFyZWQvTm90aWZpY2F0aW9ucy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Student/MyDocuments.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdHVkZW50L015RG9jdW1lbnRzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Student/MyGroup.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdHVkZW50L015R3JvdXAucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Student/MyMilestones.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdHVkZW50L015TWlsZXN0b25lcy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Student/MyResults.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdHVkZW50L015UmVzdWx0cy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Student/StudentDashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdHVkZW50L1N0dWRlbnREYXNoYm9hcmQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Student/SubmitProposal.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdHVkZW50L1N1Ym1pdFByb3Bvc2FsLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Supervisor/EvaluateProject.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdXBlcnZpc29yL0V2YWx1YXRlUHJvamVjdC5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Supervisor/ReviewProposals.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdXBlcnZpc29yL1Jldmlld1Byb3Bvc2Fscy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Supervisor/SupervisorDashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdXBlcnZpc29yL1N1cGVydmlzb3JEYXNoYm9hcmQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Supervisor/SupervisorGroups.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdXBlcnZpc29yL1N1cGVydmlzb3JHcm91cHMucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Pages/Supervisor/TrackProgress.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9TdXBlcnZpc29yL1RyYWNrUHJvZ3Jlc3MucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Routes.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9Sb3V0ZXMucmF6b3I=
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/_Imports.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Shared/ConfirmDialog.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9TaGFyZWQvQ29uZmlybURpYWxvZy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Shared/LoadingSpinner.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9TaGFyZWQvTG9hZGluZ1NwaW5uZXIucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Shared/ProgressBar.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9TaGFyZWQvUHJvZ3Jlc3NCYXIucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Shared/RedirectToLogin.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9TaGFyZWQvUmVkaXJlY3RUb0xvZ2luLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Shared/StatCard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9TaGFyZWQvU3RhdENhcmQucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Shared/ToastNotification.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9TaGFyZWQvVG9hc3ROb3RpZmljYXRpb24ucmF6b3I=
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/_Imports.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9fSW1wb3J0cy5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Layout/MainLayout.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Layout/MainLayout.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9MYXlvdXQvTWFpbkxheW91dC5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = b-ogixg6spxb
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Layout/NavMenu.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Layout/NavMenu.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9MYXlvdXQvTmF2TWVudS5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = b-yppsnnnf5r
 
-[/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/Components/Layout/ReconnectModal.razor]
+[/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/Components/Layout/ReconnectModal.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9MYXlvdXQvUmVjb25uZWN0TW9kYWwucmF6b3I=
 build_metadata.AdditionalFiles.CssScope = b-19gghieipr

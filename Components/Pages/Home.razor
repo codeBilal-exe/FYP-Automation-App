@@ -1,7 +1,83 @@
-﻿@page "/"
+@page "/"
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
 
-<PageTitle>Home</PageTitle>
+<section class="landing-page">
+  <nav class="landing-nav">
+    <div class="landing-brand"><i class="bi bi-mortarboard-fill"></i><span>FYP Automation</span></div>
+    <div class="landing-actions">
+      <a href="#modules">Modules</a>
+      <a href="#workflow">Workflow</a>
+      <a class="btn btn-primary" href="@_ctaUrl">@_ctaText</a>
+    </div>
+  </nav>
 
-<h1>Hello, world!</h1>
+  <header class="landing-hero">
+    <div class="hero-copy">
+      <div class="hero-kicker"><i class="bi bi-lightning-charge-fill"></i> Smart academic project operations</div>
+      <h1>Final Year Project management that feels effortless.</h1>
+      <p>Proposal approvals, team supervision, milestone tracking, document control, viva scheduling, rubric evaluations and analytics in one polished portal.</p>
+      <div class="hero-buttons">
+        <a class="btn btn-primary btn-lg" href="@_ctaUrl"><span>@_ctaText</span><i class="bi bi-arrow-right"></i></a>
+        <a class="btn btn-soft btn-lg" href="#modules"><i class="bi bi-grid-3x3-gap"></i><span>Explore modules</span></a>
+      </div>
+      <div class="hero-proof">
+        <div><strong>Role-aware</strong><span>Student, supervisor, admin, HOD and panel views</span></div>
+        <div><strong>Live data</strong><span>Seeded dashboards, charts and reports</span></div>
+      </div>
+    </div>
 
-Welcome to your new app.
+    <div class="hero-dashboard" aria-label="FYP system dashboard preview">
+      <div class="hero-window-bar"><span></span><span></span><span></span><strong>FYP Lab</strong></div>
+      <div class="hero-stat-grid">
+        <div class="hero-stat"><i class="bi bi-file-earmark-check"></i><strong>24</strong><span>Proposals</span></div>
+        <div class="hero-stat"><i class="bi bi-flag"></i><strong>82%</strong><span>Milestones</span></div>
+        <div class="hero-stat"><i class="bi bi-calendar-event"></i><strong>08</strong><span>Vivas</span></div>
+      </div>
+      <div class="hero-progress-card">
+        <div><strong>Smart FYP Automation</strong><span>Group Alpha</span></div>
+        <div class="progress progress-animated"><div class="progress-bar" style="width:72%"></div></div>
+      </div>
+      <div class="hero-list">
+        <div><i class="bi bi-check-circle-fill"></i><span>Proposal approved by HOD</span><em>Done</em></div>
+        <div><i class="bi bi-arrow-repeat"></i><span>Mid implementation review</span><em>Active</em></div>
+        <div><i class="bi bi-clock"></i><span>Final viva scheduling</span><em>Next</em></div>
+      </div>
+    </div>
+  </header>
+
+  <section id="modules" class="landing-section">
+    <div class="section-heading"><span>Complete toolkit</span><h2>Built for every stakeholder.</h2></div>
+    <div class="module-grid">
+      <article><i class="bi bi-person-workspace"></i><h3>Student Portal</h3><p>Submit proposals, view milestones, upload documents, track group progress and receive results.</p></article>
+      <article><i class="bi bi-person-video3"></i><h3>Supervisor Console</h3><p>Review proposals, monitor groups, evaluate work with rubrics and keep feedback moving.</p></article>
+      <article><i class="bi bi-shield-check"></i><h3>Admin Control</h3><p>Manage users, groups, viva slots, reports, audit logs and institutional oversight.</p></article>
+      <article><i class="bi bi-chat-dots"></i><h3>Collaboration</h3><p>Notifications and messaging keep every project member aligned from kickoff to final defense.</p></article>
+    </div>
+  </section>
+
+  <section id="workflow" class="workflow-band">
+    <div class="section-heading"><span>Workflow</span><h2>From proposal to viva.</h2></div>
+    <div class="workflow-steps">
+      <div><b>01</b><strong>Submit</strong><span>Students submit proposals with objectives and abstracts.</span></div>
+      <div><b>02</b><strong>Approve</strong><span>Supervisors, coordinators and HODs review each stage.</span></div>
+      <div><b>03</b><strong>Track</strong><span>Milestones, documents and dashboards stay synchronized.</span></div>
+      <div><b>04</b><strong>Evaluate</strong><span>Rubrics, viva schedules and reports close the loop.</span></div>
+    </div>
+  </section>
+</section>
+
+@code {
+  private string _ctaText = "Sign in";
+  private string _ctaUrl = "/login";
+
+  protected override async Task OnInitializedAsync()
+  {
+    var s = await AuthProvider.GetAuthenticationStateAsync();
+    if (s.User.Identity?.IsAuthenticated == true)
+    {
+      _ctaText = "Open dashboard";
+      _ctaUrl = "/dashboard";
+    }
+  }
+}

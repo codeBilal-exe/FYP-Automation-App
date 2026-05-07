@@ -1,0 +1,72 @@
+@page "/messages"
+@attribute [Authorize]
+@inject MessageService MessageService
+@inject AppDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header"><div><h1>Messages</h1><div class="page-subtitle">Direct messages with your team.</div></div></div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="fcard">
+      <div class="fcard-title"><i class="bi bi-people"></i> Contacts</div>
+      @foreach (var c in _contacts)
+      {
+        <button class="btn w-100 text-start mb-1 @(c.Id == _other?.Id ? "btn-soft" : "btn-light")" @onclick="() => Select(c)">
+          <div class="fw-semibold">@c.FullName</div><div class="small text-muted">@c.Role</div>
+        </button>
+      }
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="fcard" style="min-height:420px;display:flex;flex-direction:column">
+      @if (_other == null) { <div class="empty-state flex-grow-1"><i class="bi bi-chat-dots"></i>Select a contact.</div> }
+      else
+      {
+        <div class="fcard-title"><i class="bi bi-chat"></i> @_other.FullName</div>
+        <div class="flex-grow-1" style="overflow-y:auto;max-height:380px">
+          @foreach (var m in _conv)
+          {
+            var mine = m.SenderId == AuthService.CurrentUser!.Id;
+            <div class="d-flex mb-2 @(mine ? "justify-content-end" : "justify-content-start")">
+              <div style="max-width:75%;padding:.5rem .8rem;border-radius:12px;background:@(mine ? "var(--primary)" : "#f1f5f9");color:@(mine ? "#fff" : "var(--text)")">
+                @m.Content<div class="small mt-1" style="opacity:.7">@m.SentAt.ToString("HH:mm")</div>
+              </div>
+            </div>
+          }
+        </div>
+        <div class="d-flex gap-2 mt-2">
+          <input class="form-control" @bind="_text" @bind:event="oninput" placeholder="Type a message…" @onkeydown="Key" />
+          <button class="btn btn-primary" @onclick="Send"><i class="bi bi-send"></i></button>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+@code {
+  private List<User> _contacts = new();
+  private User? _other;
+  private List<Message> _conv = new();
+  private string _text = "";
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _contacts = await Db.Users.Where(x => x.Id != u.Id && x.IsActive).ToListAsync();
+  }
+  private async Task Select(User c) { _other = c; await Load(); }
+  private async Task Load()
+  {
+    var u = AuthService.CurrentUser!;
+    if (_other == null) return;
+    _conv = await MessageService.GetConversation(u.Id, _other.Id);
+  }
+  private async Task Send()
+  {
+    if (_other == null || string.IsNullOrWhiteSpace(_text)) return;
+    await MessageService.SendMessage(AuthService.CurrentUser!.Id, _other.Id, _text);
+    _text = "";
+    await Load();
+  }
+  private async Task Key(KeyboardEventArgs e) { if (e.Key == "Enter") await Send(); }
+}

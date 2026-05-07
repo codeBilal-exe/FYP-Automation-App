@@ -1,30 +1,42 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">FYP_AutomationSystem</a>
-    </div>
-</div>
+<nav class="sidebar-nav">
+    @if (Role == "Student")
+    {
+        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/student/proposal"><i class="bi bi-file-earmark-text"></i><span>Submit Proposal</span></NavLink>
+        <NavLink class="nav-item-link" href="/student/milestones"><i class="bi bi-flag"></i><span>My Milestones</span></NavLink>
+        <NavLink class="nav-item-link" href="/student/documents"><i class="bi bi-folder2-open"></i><span>My Documents</span></NavLink>
+        <NavLink class="nav-item-link" href="/student/group"><i class="bi bi-people"></i><span>My Group</span></NavLink>
+        <NavLink class="nav-item-link" href="/student/results"><i class="bi bi-award"></i><span>My Results</span></NavLink>
+    }
+    else if (Role == "Supervisor")
+    {
+        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/proposals"><i class="bi bi-clipboard-check"></i><span>Review Proposals</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/progress"><i class="bi bi-graph-up"></i><span>Track Progress</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/evaluate"><i class="bi bi-star"></i><span>Evaluate</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/groups"><i class="bi bi-diagram-3"></i><span>My Groups</span></NavLink>
+    }
+    else if (Role == "Admin" || Role == "HOD" || Role == "Coordinator")
+    {
+        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/users"><i class="bi bi-person-gear"></i><span>Manage Users</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/groups"><i class="bi bi-diagram-3"></i><span>Manage Groups</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/proposals"><i class="bi bi-clipboard-check"></i><span>Proposals</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/viva"><i class="bi bi-calendar-event"></i><span>Viva Scheduling</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/reports"><i class="bi bi-bar-chart"></i><span>Reports</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/audit"><i class="bi bi-shield-check"></i><span>Audit Logs</span></NavLink>
+    }
+    else if (Role == "Panel")
+    {
+        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/evaluate"><i class="bi bi-star"></i><span>Evaluate</span></NavLink>
+    }
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    <div class="nav-divider"></div>
+    <NavLink class="nav-item-link" href="/notifications"><i class="bi bi-bell"></i><span>Notifications</span></NavLink>
+    <NavLink class="nav-item-link" href="/messages"><i class="bi bi-chat-dots"></i><span>Messages</span></NavLink>
+</nav>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+@code {
+    [Parameter] public string Role { get; set; } = "";
+}

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj": {}
+    "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj": {}
   },
   "projects": {
-    "/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj": {
+    "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
+        "projectUniqueName": "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
         "projectName": "FYP_AutomationSystem",
-        "projectPath": "/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
+        "projectPath": "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/FYP_AutomationSystem.csproj",
         "packagesPath": "/Users/Raheem/.nuget/packages/",
-        "outputPath": "/Users/Raheem/Desktop/PROJECTS/VP - LAB/FYP_AutomationSystem/obj/",
+        "outputPath": "/Users/Raheem/Downloads/VP - LAB/FYP_AutomationSystem/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/Users/Raheem/.nuget/NuGet/NuGet.Config"

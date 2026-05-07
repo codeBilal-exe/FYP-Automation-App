@@ -1,0 +1,129 @@
+@page "/student/proposal"
+@attribute [Authorize(Roles = "Student")]
+@inject AppDbContext Db
+@inject ProposalService ProposalService
+@inject AuditService AuditService
+
+<div class="page-header">
+  <div>
+    <h1>Submit Proposal</h1>
+    <div class="page-subtitle">Submit and track your project proposal.</div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="fcard">
+      <div class="fcard-title"><i class="bi bi-file-earmark-plus"></i> New Proposal</div>
+      <EditForm Model="_model" OnValidSubmit="Submit" FormName="proposal-form">
+        <DataAnnotationsValidator />
+        <div class="mb-3"><label class="form-label">Title</label><InputText class="form-control" @bind-Value="_model.Title" /></div>
+        <div class="mb-3"><label class="form-label">Abstract</label><InputTextArea rows="4" class="form-control" @bind-Value="_model.Abstract" /></div>
+        <div class="mb-3"><label class="form-label">Objectives</label><InputTextArea rows="4" class="form-control" @bind-Value="_model.Objectives" /></div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-light" type="button" @onclick="() => SaveAs(ProposalStatus.Draft)">Save as Draft</button>
+          <button class="btn btn-primary" type="submit">Submit to Supervisor</button>
+        </div>
+      </EditForm>
+      @if (!string.IsNullOrEmpty(_msg)) { <div class="alert alert-success mt-3 mb-0">@_msg</div> }
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="fcard">
+      <div class="fcard-title"><i class="bi bi-bar-chart-steps"></i> Approval Workflow</div>
+      <div class="timeline">
+        @foreach (var step in _steps)
+        {
+          var done = StatusOrder(_currentStatus) >= step.Order;
+          var cls = done ? "completed" : "pending";
+          <div class="timeline-item @cls">
+            <div class="fw-semibold">@step.Label</div>
+            <div class="small text-muted">@(done ? "Done" : "Pending")</div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="fcard mt-3">
+      <div class="fcard-title"><i class="bi bi-clock-history"></i> My Proposals</div>
+      @if (!_existing.Any()) { <div class="text-muted small">No proposals yet.</div> }
+      else
+      {
+        @foreach (var p in _existing)
+        {
+          <div class="py-2 border-bottom">
+            <div class="d-flex justify-content-between">
+              <strong>@p.Title</strong>
+              <span class="fbadge @StatusClass(p.Status)">@p.Status</span>
+            </div>
+            <div class="small text-muted">@p.SubmittedAt.ToString("MMM dd, yyyy")</div>
+            @if (!string.IsNullOrEmpty(p.RejectionReason)) { <div class="small text-danger">Reason: @p.RejectionReason</div> }
+          </div>
+        }
+      }
+    </div>
+  </div>
+</div>
+
+@code {
+  private record Step(int Order, string Label);
+  private List<Step> _steps = new()
+  {
+    new(1,"Submitted"), new(2,"Supervisor"), new(3,"Coordinator"), new(4,"HOD")
+  };
+  private ProposalModel _model = new();
+  private List<Proposal> _existing = new();
+  private string? _msg;
+  private ProposalStatus _currentStatus = ProposalStatus.Draft;
+
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    _existing = await ProposalService.GetProposalsByStudentAsync(u.Id);
+    if (_existing.Any()) _currentStatus = _existing.OrderByDescending(p => p.SubmittedAt).First().Status;
+  }
+
+  private async Task Submit() => await SaveAs(ProposalStatus.SubmittedToSupervisor);
+
+  private async Task SaveAs(ProposalStatus status)
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    var group = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members), g => g.Members.Any(m => m.Id == u.Id));
+    var p = new Proposal {
+      Title = _model.Title, Abstract = _model.Abstract, Objectives = _model.Objectives,
+      Status = status, StudentId = u.Id, GroupId = group?.Id ?? 0, SubmittedAt = DateTime.UtcNow
+    };
+    await ProposalService.CreateProposalAsync(p);
+    await AuditService.LogActionAsync(u.Id, "ProposalSubmit", $"Status={status}, Title={_model.Title}");
+    _msg = status == ProposalStatus.Draft ? "Saved as draft." : "Submitted for review.";
+    _model = new();
+    _existing = await ProposalService.GetProposalsByStudentAsync(u.Id);
+    _currentStatus = status;
+  }
+
+  private static int StatusOrder(ProposalStatus s) => s switch
+  {
+    ProposalStatus.Draft => 0,
+    ProposalStatus.SubmittedToSupervisor => 1,
+    ProposalStatus.ApprovedBySupervisor => 2,
+    ProposalStatus.ApprovedByCoordinator => 3,
+    ProposalStatus.ApprovedByHOD => 4,
+    _ => 0
+  };
+
+  private static string StatusClass(ProposalStatus s) => s switch
+  {
+    ProposalStatus.ApprovedByHOD => "completed",
+    ProposalStatus.Rejected => "danger",
+    ProposalStatus.Draft => "pending",
+    _ => "active"
+  };
+
+  public class ProposalModel
+  {
+    [System.ComponentModel.DataAnnotations.Required] public string Title { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required] public string Abstract { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required] public string Objectives { get; set; } = "";
+  }
+}

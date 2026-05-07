@@ -1,0 +1,124 @@
+@page "/supervisor/evaluate"
+@attribute [Authorize(Roles = "Supervisor,Panel,HOD,Admin")]
+@inject AppDbContext Db
+@inject EvaluationService EvaluationService
+@inject AuditService AuditService
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header"><div><h1>Evaluate Projects</h1><div class="page-subtitle">Score projects against the rubric.</div></div></div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="fcard">
+      <div class="fcard-title"><i class="bi bi-list"></i> Projects</div>
+      @foreach (var p in _projects)
+      {
+        <button class="btn w-100 text-start mb-1 @(p.Id == _selected?.Id ? "btn-soft" : "btn-light")"
+                @onclick="() => Select(p)">@p.Title</button>
+      }
+    </div>
+  </div>
+  <div class="col-md-8">
+    @if (_selected == null) { <div class="empty-state"><i class="bi bi-arrow-left-circle"></i>Select a project to evaluate.</div> }
+    else
+    {
+      <div class="fcard">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div><strong>@_selected.Title</strong><div class="text-muted small">@_selected.Description</div></div>
+          @if (_evaluation?.IsLocked == true) { <span class="fbadge completed">Locked</span> }
+        </div>
+        <table class="ftable mb-3">
+          <thead><tr><th>Criterion</th><th>Max</th><th>Score</th></tr></thead>
+          <tbody>
+            @foreach (var r in _rubric)
+            {
+              var v = _scores.GetValueOrDefault(r.Id, 0m);
+              <tr>
+                <td>@r.Criterion<div class="small text-muted">@r.Description</div></td>
+                <td>@r.MaxMarks</td>
+                <td><input type="number" class="form-control form-control-sm" style="width:90px" min="0" max="@r.MaxMarks" step="1"
+                           value="@v" @onchange="@(e => SetScore(r, e))" disabled="@(_evaluation?.IsLocked == true)" /></td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr><td colspan="2" class="text-end fw-semibold">Total</td><td><strong>@_scores.Values.Sum() / @_rubric.Sum(r => r.MaxMarks)</strong></td></tr>
+          </tfoot>
+        </table>
+        <div class="mb-3">
+          <label class="form-label">Feedback</label>
+          <textarea class="form-control" rows="3" @bind="_feedback" disabled="@(_evaluation?.IsLocked == true)"></textarea>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-soft" @onclick="Save" disabled="@(_evaluation?.IsLocked == true)">Save Draft</button>
+          <button class="btn btn-primary" @onclick="LockEval" disabled="@(_evaluation?.IsLocked == true)">Lock & Submit</button>
+        </div>
+        @if (!string.IsNullOrEmpty(_msg)) { <div class="alert alert-success mt-3 mb-0">@_msg</div> }
+      </div>
+    }
+  </div>
+</div>
+
+@code {
+  private List<Project> _projects = new();
+  private List<RubricItem> _rubric = new();
+  private Project? _selected;
+  private Evaluation? _evaluation;
+  private Dictionary<int, decimal> _scores = new();
+  private string _feedback = "";
+  private string? _msg;
+
+  protected override async Task OnInitializedAsync()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    if (u.Role == UserRole.Supervisor)
+      _projects = await Db.Projects.Include(p => p.Group).Where(p => p.Group != null && p.Group.SupervisorId == u.Id).ToListAsync();
+    else
+      _projects = await Db.Projects.ToListAsync();
+    _rubric = await Db.RubricItems.ToListAsync();
+  }
+
+  private async Task Select(Project p)
+  {
+    _selected = p; _msg = null;
+    var u = AuthService.CurrentUser!;
+    _evaluation = await Db.Evaluations
+      .Include(e => e.RubricScores)
+      .FirstOrDefaultAsync(e => e.ProjectId == p.Id && e.EvaluatorId == u.Id);
+    if (_evaluation == null)
+    {
+      _evaluation = await EvaluationService.CreateEvaluation(p.Id, u.Id);
+    }
+    _scores = _evaluation?.RubricScores.ToDictionary(rs => rs.RubricItemId, rs => rs.ObtainedMarks) ?? new();
+    _feedback = _evaluation?.Feedback ?? "";
+  }
+
+  private void SetScore(RubricItem r, ChangeEventArgs e)
+  {
+    if (decimal.TryParse(e.Value?.ToString(), out var v))
+    {
+      v = Math.Clamp(v, 0, r.MaxMarks);
+      _scores[r.Id] = v;
+    }
+  }
+
+  private async Task Save()
+  {
+    if (_evaluation == null) return;
+    foreach (var kv in _scores) await EvaluationService.AddRubricScore(_evaluation.Id, kv.Key, kv.Value);
+    await EvaluationService.UpdateFeedback(_evaluation.Id, _feedback);
+    await EvaluationService.CalculateTotalScore(_evaluation.Id);
+    _msg = "Saved.";
+  }
+
+  private async Task LockEval()
+  {
+    if (_evaluation == null) return;
+    await Save();
+    await EvaluationService.LockEvaluation(_evaluation.Id);
+    var u = AuthService.CurrentUser!;
+    await AuditService.LogActionAsync(u.Id, "EvaluationLock", $"Eval#{_evaluation.Id}");
+    _msg = "Evaluation locked.";
+    _evaluation = await Db.Evaluations.Include(e => e.RubricScores).FirstAsync(e => e.Id == _evaluation.Id);
+  }
+}

@@ -1,0 +1,10 @@
+<div class="progress progress-animated" style="height: 10px;">
+  <div class="progress-bar @ColorClass"
+       role="progressbar"
+       style="width: @(Value)%; --target-width: @(Value)%;"
+       aria-valuenow="@Value" aria-valuemin="0" aria-valuemax="100"></div>
+</div>
+@code {
+  [Parameter] public int Value { get; set; }
+  [Parameter] public string ColorClass { get; set; } = "bg-primary";
+}

@@ -1,0 +1,84 @@
+@page "/student/documents"
+@attribute [Authorize(Roles = "Student")]
+@inject AppDbContext Db
+@inject DocumentService DocumentService
+
+<div class="page-header">
+  <div><h1>My Documents</h1><div class="page-subtitle">Upload and manage project documents.</div></div>
+</div>
+
+@if (_project == null) { <div class="empty-state"><i class="bi bi-inbox"></i>No project assigned.</div> }
+else
+{
+  <div class="fcard mb-3">
+    <div class="fcard-title"><i class="bi bi-cloud-upload"></i> Upload Document</div>
+    <InputFile OnChange="OnFileSelected" class="form-control" accept=".pdf,.docx,.zip" />
+    <div class="small text-muted mt-2">Max 20 MB. Allowed: PDF, DOCX, ZIP.</div>
+    @if (!string.IsNullOrEmpty(_msg)) { <div class="alert alert-info mt-2 mb-0 py-2 small">@_msg</div> }
+  </div>
+
+  <div class="fcard">
+    <div class="fcard-title"><i class="bi bi-folder2-open"></i> Documents</div>
+    @if (!_docs.Any()) { <div class="empty-state"><i class="bi bi-file-earmark"></i>No documents yet.</div> }
+    else
+    {
+      <table class="ftable">
+        <thead><tr><th>File</th><th>Size</th><th>Version</th><th>Uploaded</th><th></th></tr></thead>
+        <tbody>
+          @foreach (var d in _docs)
+          {
+            <tr>
+              <td><i class="bi bi-file-earmark me-2"></i>@d.FileName</td>
+              <td>@FormatSize(d.FileSizeBytes)</td>
+              <td>v@(d.Version)</td>
+              <td>@d.UploadedAt.ToString("MMM dd, yyyy")</td>
+              <td><a class="btn btn-sm btn-soft" href="/@d.FilePath.Replace("\\","/")" target="_blank"><i class="bi bi-download"></i></a></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+}
+
+@code {
+  private Project? _project;
+  private List<Document> _docs = new();
+  private string? _msg;
+
+  protected override async Task OnInitializedAsync() => await Load();
+
+  private async Task Load()
+  {
+    var u = AuthService.CurrentUser; if (u == null) return;
+    var g = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Project), g => g.Members.Any(m => m.Id == u.Id));
+    _project = g?.Project;
+    if (_project != null) _docs = await DocumentService.GetDocumentsByProject(_project.Id);
+  }
+
+  private async Task OnFileSelected(InputFileChangeEventArgs e)
+  {
+    var u = AuthService.CurrentUser; if (u == null || _project == null) return;
+    var file = e.File;
+    if (file.Size > 20 * 1024 * 1024) { _msg = "File exceeds 20 MB limit."; return; }
+    using var ms = new MemoryStream();
+    await file.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
+    ms.Position = 0;
+    var formFile = new Microsoft.AspNetCore.Http.FormFile(ms, 0, ms.Length, "file", file.Name)
+    {
+      Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
+      ContentType = file.ContentType
+    };
+    var doc = await DocumentService.UploadDocument(formFile, _project.Id, u.Id);
+    _msg = doc != null ? "Uploaded successfully." : "Upload failed.";
+    await Load();
+  }
+
+  private static string FormatSize(long b)
+  {
+    if (b > 1024 * 1024) return $"{b / 1024.0 / 1024.0:F1} MB";
+    if (b > 1024) return $"{b / 1024.0:F1} KB";
+    return $"{b} B";
+  }
+}

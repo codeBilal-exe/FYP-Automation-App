@@ -1,0 +1,73 @@
+@page "/admin/viva"
+@attribute [Authorize(Roles = "Admin,Coordinator,HOD")]
+@inject AppDbContext Db
+@inject VivaService VivaService
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>Viva Scheduling</h1><div class="page-subtitle">Schedule and manage viva slots.</div></div>
+  <button class="btn btn-primary" @onclick="() => _show = true"><i class="bi bi-plus-lg me-1"></i>New Slot</button>
+</div>
+
+<div class="fcard">
+  <table class="ftable">
+    <thead><tr><th>Date / Time</th><th>Project</th><th>Venue</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      @foreach (var v in _vivas)
+      {
+        var p = _projects.FirstOrDefault(x => x.Id == v.ProjectId);
+        <tr>
+          <td>@v.ScheduledAt.ToString("MMM dd, yyyy HH:mm")</td>
+          <td>@(p?.Title ?? "—")</td>
+          <td>@v.Venue</td>
+          <td><span class="fbadge @(v.Status.ToString().ToLower())">@v.Status</span></td>
+          <td><button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(v)"><i class="bi bi-trash"></i></button></td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+@if (_show)
+{
+  <div class="modal-backdrop-c" @onclick="() => _show = false">
+    <div class="modal-card" @onclick:stopPropagation>
+      <h5>New Viva Slot</h5>
+      <div class="mb-2"><label class="form-label">Date / Time</label><input type="datetime-local" class="form-control" @bind="_when" /></div>
+      <div class="mb-2"><label class="form-label">Venue</label><input class="form-control" @bind="_venue" /></div>
+      <div class="mb-3"><label class="form-label">Project</label>
+        <select class="form-select" @bind="_pid">
+          <option value="0">— Select —</option>
+          @foreach (var p in _projects) { <option value="@p.Id">@p.Title</option> }
+        </select>
+      </div>
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-light" @onclick="() => _show = false">Cancel</button>
+        <button class="btn btn-primary" @onclick="Create">Create</button>
+      </div>
+    </div>
+  </div>
+}
+
+@code {
+  private List<VivaSlot> _vivas = new();
+  private List<Project> _projects = new();
+  private bool _show;
+  private DateTime _when = DateTime.Now.AddDays(7);
+  private string _venue = "";
+  private int _pid;
+  protected override async Task OnInitializedAsync() => await Load();
+  private async Task Load()
+  {
+    _vivas = await Db.VivaSlots.OrderByDescending(v => v.ScheduledAt).ToListAsync();
+    _projects = await Db.Projects.ToListAsync();
+  }
+  private async Task Create()
+  {
+    if (_pid == 0 || string.IsNullOrWhiteSpace(_venue)) return;
+    await VivaService.CreateVivaSlot(_when, _venue, _pid);
+    _show = false; _venue = ""; _pid = 0;
+    await Load();
+  }
+  private async Task Delete(VivaSlot v) { await VivaService.DeleteVivaSlot(v.Id); await Load(); }
+}

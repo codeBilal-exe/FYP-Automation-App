@@ -1,0 +1,35 @@
+@page "/admin/audit"
+@attribute [Authorize(Roles = "Admin,HOD")]
+@inject AuditService AuditService
+@inject AppDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header"><div><h1>Audit Logs</h1><div class="page-subtitle">System-wide action history.</div></div></div>
+<div class="fcard">
+  <table class="ftable">
+    <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th><th>IP</th></tr></thead>
+    <tbody>
+      @foreach (var l in _logs.Take(200))
+      {
+        <tr>
+          <td>@l.Timestamp.ToString("MMM dd HH:mm")</td>
+          <td>@_names.GetValueOrDefault(l.UserId, "—")</td>
+          <td><span class="fbadge info">@l.Action</span></td>
+          <td><span class="text-muted small">@l.Details</span></td>
+          <td><span class="text-muted small">@l.IpAddress</span></td>
+        </tr>
+      }
+    </tbody>
+  </table>
+  @if (!_logs.Any()) { <div class="empty-state"><i class="bi bi-shield"></i>No audit logs yet.</div> }
+</div>
+
+@code {
+  private List<AuditLog> _logs = new();
+  private Dictionary<int,string> _names = new();
+  protected override async Task OnInitializedAsync()
+  {
+    _logs = await AuditService.GetAllAuditLogsAsync();
+    _names = await Db.Users.ToDictionaryAsync(u => u.Id, u => u.FullName);
+  }
+}
