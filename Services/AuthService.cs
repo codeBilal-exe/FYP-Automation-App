@@ -8,12 +8,12 @@ namespace FYP_AutomationSystem.Services
 {
     public class AuthService
     {
-        private readonly AppDbContext _context;
+        private readonly IDbContextFactory<AppDbContext> _contextFactory;
         public static User? CurrentUser { get; set; }
 
-        public AuthService(AppDbContext context)
+        public AuthService(IDbContextFactory<AppDbContext> contextFactory)
         {
-            _context = context;
+            _contextFactory = contextFactory;
         }
 
         /// <summary>
@@ -23,7 +23,9 @@ namespace FYP_AutomationSystem.Services
         {
             try
             {
-                var user = await _context.Users
+                await using var context = await _contextFactory.CreateDbContextAsync();
+                var user = await context.Users
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
 
                 if (user == null)

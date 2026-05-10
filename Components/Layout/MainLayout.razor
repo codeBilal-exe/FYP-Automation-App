@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
-@inject AuthenticationStateProvider AuthProvider
 @inject NotificationService NotificationService
+@inject IHttpContextAccessor HttpContextAccessor
 
 <div class="app-shell">
     <AuthorizeView>
@@ -71,14 +71,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var state = await AuthProvider.GetAuthenticationStateAsync();
-        var user = state.User;
-        if (user.Identity?.IsAuthenticated == true)
+        var user = HttpContextAccessor.HttpContext?.User;
+        if (user?.Identity?.IsAuthenticated == true)
         {
             _role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
-            if (AuthService.CurrentUser != null)
+            var idValue = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(idValue, out var userId))
             {
-                _unread = await NotificationService.CountUnread(AuthService.CurrentUser.Id);
+                _unread = await NotificationService.CountUnread(userId);
             }
         }
         Nav.LocationChanged += OnLocationChanged;

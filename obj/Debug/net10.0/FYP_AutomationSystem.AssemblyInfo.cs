@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FYP_AutomationSystem")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+15e255fa3f9a76938b909c1519f8e22c6e9175dc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7a5870248305fe9222dc8b4a7ec5986cebb25a13")]
 [assembly: System.Reflection.AssemblyProductAttribute("FYP_AutomationSystem")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FYP_AutomationSystem")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -16,12 +16,13 @@ namespace FYP_AutomationSystem.Services
     public class CustomAuthStateProvider : AuthenticationStateProvider
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly AppDbContext _context;
+        private readonly IDbContextFactory<AppDbContext> _contextFactory;
+        private readonly SemaphoreSlim _authLock = new(1, 1);
 
-        public CustomAuthStateProvider(IHttpContextAccessor httpContextAccessor, AppDbContext context)
+        public CustomAuthStateProvider(IHttpContextAccessor httpContextAccessor, IDbContextFactory<AppDbContext> contextFactory)
         {
             _httpContextAccessor = httpContextAccessor;
-            _context = context;
+            _contextFactory = contextFactory;
         }
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -34,8 +35,17 @@ namespace FYP_AutomationSystem.Services
                 var idValue = httpUser.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (int.TryParse(idValue, out var userId))
                 {
-                    user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
-                    AuthService.CurrentUser = user;
+                    await _authLock.WaitAsync();
+                    try
+                    {
+                        await using var context = await _contextFactory.CreateDbContextAsync();
+                        user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+                        AuthService.CurrentUser = user;
+                    }
+                    finally
+                    {
+                        _authLock.Release();
+                    }
                 }
             }
 
