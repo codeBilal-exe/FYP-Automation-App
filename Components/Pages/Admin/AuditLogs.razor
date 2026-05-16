@@ -1,5 +1,5 @@
 @page "/admin/audit"
-@attribute [Authorize(Roles = "Admin,HOD")]
+@attribute [Authorize(Roles = "Admin")]
 @inject AuditService AuditService
 @inject AppDbContext Db
 @using Microsoft.EntityFrameworkCore

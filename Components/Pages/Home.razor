@@ -1,83 +1,106 @@
 @page "/"
+@layout MainLayout
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 
-<section class="landing-page">
-  <nav class="landing-nav">
-    <div class="landing-brand"><i class="bi bi-mortarboard-fill"></i><span>FYP Automation</span></div>
-    <div class="landing-actions">
-      <a href="#modules">Modules</a>
-      <a href="#workflow">Workflow</a>
-      <a class="btn btn-primary" href="@_ctaUrl">@_ctaText</a>
-    </div>
-  </nav>
+<section class="auth-page compact-auth-page">
+  <div class="auth-ambient auth-ambient-one"></div>
+  <div class="auth-ambient auth-ambient-two"></div>
 
-  <header class="landing-hero">
-    <div class="hero-copy">
-      <div class="hero-kicker"><i class="bi bi-lightning-charge-fill"></i> Smart academic project operations</div>
-      <h1>Final Year Project management that feels effortless.</h1>
-      <p>Proposal approvals, team supervision, milestone tracking, document control, viva scheduling, rubric evaluations and analytics in one polished portal.</p>
-      <div class="hero-buttons">
-        <a class="btn btn-primary btn-lg" href="@_ctaUrl"><span>@_ctaText</span><i class="bi bi-arrow-right"></i></a>
-        <a class="btn btn-soft btn-lg" href="#modules"><i class="bi bi-grid-3x3-gap"></i><span>Explore modules</span></a>
-      </div>
-      <div class="hero-proof">
-        <div><strong>Role-aware</strong><span>Student, supervisor, admin, HOD and panel views</span></div>
-        <div><strong>Live data</strong><span>Seeded dashboards, charts and reports</span></div>
-      </div>
-    </div>
+  <div class="auth-showcase">
+    <div class="auth-kicker"><i class="bi bi-shield-check"></i> Secure Access</div>
+    <h1>FYP Automation System</h1>
+    <p>Sign in to continue to your role-based workspace for proposals, milestones, documents, and evaluations.</p>
 
-    <div class="hero-dashboard" aria-label="FYP system dashboard preview">
-      <div class="hero-window-bar"><span></span><span></span><span></span><strong>FYP Lab</strong></div>
-      <div class="hero-stat-grid">
-        <div class="hero-stat"><i class="bi bi-file-earmark-check"></i><strong>24</strong><span>Proposals</span></div>
-        <div class="hero-stat"><i class="bi bi-flag"></i><strong>82%</strong><span>Milestones</span></div>
-        <div class="hero-stat"><i class="bi bi-calendar-event"></i><strong>08</strong><span>Vivas</span></div>
-      </div>
-      <div class="hero-progress-card">
-        <div><strong>Smart FYP Automation</strong><span>Group Alpha</span></div>
-        <div class="progress progress-animated"><div class="progress-bar" style="width:72%"></div></div>
-      </div>
-      <div class="hero-list">
-        <div><i class="bi bi-check-circle-fill"></i><span>Proposal approved by HOD</span><em>Done</em></div>
-        <div><i class="bi bi-arrow-repeat"></i><span>Mid implementation review</span><em>Active</em></div>
-        <div><i class="bi bi-clock"></i><span>Final viva scheduling</span><em>Next</em></div>
-      </div>
-    </div>
-  </header>
+    <ul class="auth-highlights" aria-label="platform highlights">
+      <li><i class="bi bi-check-circle-fill"></i><span>Role-based dashboards for students, supervisors, HOD, coordinator, and admin.</span></li>
+      <li><i class="bi bi-check-circle-fill"></i><span>Centralized workflow for proposal review to final viva.</span></li>
+      <li><i class="bi bi-check-circle-fill"></i><span>Built-in communication, tracking, and reporting tools.</span></li>
+    </ul>
+  </div>
 
-  <section id="modules" class="landing-section">
-    <div class="section-heading"><span>Complete toolkit</span><h2>Built for every stakeholder.</h2></div>
-    <div class="module-grid">
-      <article><i class="bi bi-person-workspace"></i><h3>Student Portal</h3><p>Submit proposals, view milestones, upload documents, track group progress and receive results.</p></article>
-      <article><i class="bi bi-person-video3"></i><h3>Supervisor Console</h3><p>Review proposals, monitor groups, evaluate work with rubrics and keep feedback moving.</p></article>
-      <article><i class="bi bi-shield-check"></i><h3>Admin Control</h3><p>Manage users, groups, viva slots, reports, audit logs and institutional oversight.</p></article>
-      <article><i class="bi bi-chat-dots"></i><h3>Collaboration</h3><p>Notifications and messaging keep every project member aligned from kickoff to final defense.</p></article>
-    </div>
-  </section>
+  <div class="auth-card pro-auth-card">
+    <div class="auth-logo"><i class="bi bi-mortarboard-fill"></i></div>
+    <h2>Sign in</h2>
+    <p class="text-muted mb-4">Enter your credentials to access the platform.</p>
 
-  <section id="workflow" class="workflow-band">
-    <div class="section-heading"><span>Workflow</span><h2>From proposal to viva.</h2></div>
-    <div class="workflow-steps">
-      <div><b>01</b><strong>Submit</strong><span>Students submit proposals with objectives and abstracts.</span></div>
-      <div><b>02</b><strong>Approve</strong><span>Supervisors, coordinators and HODs review each stage.</span></div>
-      <div><b>03</b><strong>Track</strong><span>Milestones, documents and dashboards stay synchronized.</span></div>
-      <div><b>04</b><strong>Evaluate</strong><span>Rubrics, viva schedules and reports close the loop.</span></div>
+    @if (!string.IsNullOrEmpty(_error))
+    {
+      <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
+    }
+
+    <form method="post" action="/auth/login" class="login-form">
+      <div class="mb-3">
+        <label class="form-label" for="email">Email</label>
+        <div class="input-icon-wrap">
+          <i class="bi bi-envelope"></i>
+          <input id="email" name="email" class="form-control" type="email" value="@_email" placeholder="you@fyp.edu"
+                 autocomplete="username" required />
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="password">Password</label>
+        <div class="input-icon-wrap">
+          <i class="bi bi-lock"></i>
+          <input id="password" name="password" type="password" class="form-control" placeholder="••••••••"
+                 autocomplete="current-password" required />
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3 small text-muted">
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="remember" />
+          <label class="form-check-label" for="remember">Remember me</label>
+        </div>
+        <span>Need access? Contact admin.</span>
+      </div>
+
+      <button class="btn btn-primary w-100 auth-submit" type="submit">
+        <span>Sign in</span><i class="bi bi-arrow-right"></i>
+      </button>
+    </form>
+
+    <div class="demo-creds mt-4">
+      <div class="demo-title"><i class="bi bi-key"></i> Demo accounts</div>
+      <button type="button" class="demo-pill" data-email="admin@fyp.edu" data-password="Admin@123">Admin</button>
+      <button type="button" class="demo-pill" data-email="supervisor1@fyp.edu" data-password="Super@123">Supervisor</button>
+      <button type="button" class="demo-pill" data-email="student1@fyp.edu" data-password="Student@123">Student</button>
+      <button type="button" class="demo-pill" data-email="hod@fyp.edu" data-password="HOD@123">HOD</button>
+      <button type="button" class="demo-pill" data-email="coordinator@fyp.edu" data-password="Coord@123">Coordinator</button>
     </div>
-  </section>
+  </div>
 </section>
 
 @code {
-  private string _ctaText = "Sign in";
-  private string _ctaUrl = "/login";
+  private string? _error;
+  private string _email = "";
 
   protected override async Task OnInitializedAsync()
   {
-    var s = await AuthProvider.GetAuthenticationStateAsync();
-    if (s.User.Identity?.IsAuthenticated == true)
+    var authState = await AuthProvider.GetAuthenticationStateAsync();
+    if (authState.User.Identity?.IsAuthenticated == true)
     {
-      _ctaText = "Open dashboard";
-      _ctaUrl = "/dashboard";
+      Nav.NavigateTo("/dashboard");
+      return;
+    }
+
+    var query = new Uri(Nav.Uri).Query.TrimStart('?')
+      .Split('&', StringSplitOptions.RemoveEmptyEntries)
+      .Select(part => part.Split('=', 2))
+      .ToDictionary(
+        part => Uri.UnescapeDataString(part[0]),
+        part => part.Length > 1 ? Uri.UnescapeDataString(part[1]) : ""
+      );
+
+    if (query.TryGetValue("error", out var error))
+    {
+      _error = error == "locked" ? "Account locked. Try again later." : "Invalid email or password.";
+    }
+
+    if (query.TryGetValue("email", out var email))
+    {
+      _email = email;
     }
   }
 }

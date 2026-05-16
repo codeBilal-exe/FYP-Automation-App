@@ -1,85 +1,559 @@
+@page "/coordinator/groups"
 @page "/admin/groups"
-@attribute [Authorize(Roles = "Admin,HOD,Coordinator")]
+@attribute [Authorize(Roles = "Coordinator")]
 @inject AppDbContext Db
+@inject AuditService AuditService
+@inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
-  <div><h1>Manage Groups</h1><div class="page-subtitle">Create groups and assign supervisors.</div></div>
-  <button class="btn btn-primary" @onclick="() => _show = true"><i class="bi bi-plus-lg me-1"></i>New Group</button>
+  <div><h1>Manage Groups</h1><div class="page-subtitle">Create and edit groups with supervisor, group lead, and member management.</div></div>
+  <button class="btn btn-primary" @onclick="OpenCreate"><i class="bi bi-plus-lg me-1"></i>New Group</button>
 </div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_success))
+{
+  <div class="alert alert-success">@_success</div>
+}
 
 <div class="fcard">
   <table class="ftable">
-    <thead><tr><th>Name</th><th>Supervisor</th><th>Members</th><th>Project</th></tr></thead>
+    <thead><tr><th>Name</th><th>Supervisor</th><th>Group Lead</th><th>Members</th><th>Project</th><th class="text-end">Actions</th></tr></thead>
     <tbody>
       @foreach (var g in _groups)
       {
+        var lead = g.Members.FirstOrDefault(m => m.Id == g.GroupLeadId);
         <tr>
           <td>@g.GroupName</td>
           <td>@(g.Supervisor?.FullName ?? "—")</td>
+          <td>@(lead?.FullName ?? "—")</td>
           <td>@g.Members.Count</td>
           <td>@(g.Project?.Title ?? "—")</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-soft me-1" @onclick="() => OpenEdit(g)"><i class="bi bi-pencil-square"></i> Edit Group</button>
+            <button class="btn btn-sm btn-outline-danger" @onclick="() => OpenDelete(g)"><i class="bi bi-trash"></i> Delete</button>
+          </td>
         </tr>
       }
     </tbody>
   </table>
 </div>
 
-@if (_show)
+@if (_showCreate)
 {
-  <div class="modal-backdrop-c" @onclick="() => _show = false">
+  <div class="modal-backdrop-c" @onclick="CloseCreate">
     <div class="modal-card" @onclick:stopPropagation>
       <h5>New Group</h5>
       <div class="mb-2"><label class="form-label">Group Name</label><input class="form-control" @bind="_name" /></div>
-      <div class="mb-2"><label class="form-label">Supervisor</label>
+      <div class="mb-2"><label class="form-label">Supervisor (Max 3 groups)</label>
         <select class="form-select" @bind="_supId">
           <option value="0">— Select —</option>
-          @foreach (var s in _supervisors) { <option value="@s.Id">@s.FullName</option> }
+          @foreach (var s in _supervisors)
+          {
+            var count = _groups.Count(g => g.SupervisorId == s.Id);
+            <option value="@s.Id">@s.FullName (@count/3)</option>
+          }
         </select>
       </div>
-      <div class="mb-3"><label class="form-label">Members</label>
-        <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem">
-          @foreach (var s in _students)
-          {
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="m@(s.Id)" checked="@_pick.Contains(s.Id)" @onchange="@(e => Toggle(s.Id, e))" />
-              <label class="form-check-label" for="m@(s.Id)">@s.FullName</label>
-            </div>
-          }
-        </div>
+
+      <div class="mb-2"><label class="form-label">Members (Min 3, Max 5)</label>
+        @if (!_ungroupedStudents.Any())
+        {
+          <div class="text-muted small">No unassigned students available.</div>
+        }
+        else
+        {
+          <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem">
+            @foreach (var s in _ungroupedStudents)
+            {
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="c_m@(s.Id)" checked="@_pick.Contains(s.Id)" @onchange="@(e => ToggleCreateMember(s.Id, e))" />
+                <label class="form-check-label" for="c_m@(s.Id)">@s.FullName</label>
+              </div>
+            }
+          </div>
+        }
       </div>
+
+      <div class="mb-3"><label class="form-label">Group Lead</label>
+        <select class="form-select" @bind="_leadId">
+          <option value="0">— Select from selected members —</option>
+          @foreach (var s in SelectedCreateMembers)
+          {
+            <option value="@s.Id">@s.FullName</option>
+          }
+        </select>
+      </div>
+
       <div class="d-flex justify-content-end gap-2">
-        <button class="btn btn-light" @onclick="() => _show = false">Cancel</button>
+        <button class="btn btn-light" @onclick="CloseCreate">Cancel</button>
         <button class="btn btn-primary" @onclick="Create">Create</button>
       </div>
     </div>
   </div>
 }
 
+@if (_showEdit)
+{
+  <div class="modal-backdrop-c" @onclick="CloseEdit">
+    <div class="modal-card" @onclick:stopPropagation>
+      <h5>Edit Group</h5>
+
+      <div class="mb-2"><label class="form-label">Group Name</label><input class="form-control" @bind="_editName" /></div>
+
+      <div class="mb-2"><label class="form-label">Supervisor (Max 3 groups)</label>
+        <select class="form-select" @bind="_editSupId">
+          <option value="0">— Select —</option>
+          @foreach (var s in _supervisors)
+          {
+            var count = _groups.Count(g => g.SupervisorId == s.Id && g.Id != _editGroupId);
+            var effectiveCount = count + (s.Id == _editSupId ? 1 : 0);
+            <option value="@s.Id">@s.FullName (@effectiveCount/3)</option>
+          }
+        </select>
+      </div>
+
+      <div class="mb-2"><label class="form-label">Members (Min 3, Max 5)</label>
+        @if (!_editCandidates.Any())
+        {
+          <div class="text-muted small">No available students for this group.</div>
+        }
+        else
+        {
+          <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:.5rem">
+            @foreach (var s in _editCandidates)
+            {
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="e_m@(s.Id)" checked="@_editPick.Contains(s.Id)" @onchange="@(e => ToggleEditMember(s.Id, e))" />
+                <label class="form-check-label" for="e_m@(s.Id)">@s.FullName</label>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="mb-3"><label class="form-label">Group Lead</label>
+        <select class="form-select" @bind="_editLeadId">
+          <option value="0">— Select from selected members —</option>
+          @foreach (var s in SelectedEditMembers)
+          {
+            <option value="@s.Id">@s.FullName</option>
+          }
+        </select>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-light" @onclick="CloseEdit">Cancel</button>
+        <button class="btn btn-primary" @onclick="SaveEdit">Save Changes</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (_showDelete)
+{
+  <div class="modal-backdrop-c" @onclick="CloseDelete">
+    <div class="modal-card" @onclick:stopPropagation>
+      <h5>Delete Group</h5>
+      <p class="text-muted small mb-3">Are you sure you want to delete <strong>@_deleteGroupName</strong>? This action cannot be undone.</p>
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-light" @onclick="CloseDelete">Cancel</button>
+        <button class="btn btn-danger" @onclick="DeleteGroup">Delete Group</button>
+      </div>
+    </div>
+  </div>
+}
+
 @code {
+  private const int MinMembers = 3;
+  private const int MaxMembers = 5;
+  private const int MaxGroupsPerSupervisor = 3;
+
   private List<Group> _groups = new();
   private List<User> _supervisors = new();
-  private List<User> _students = new();
-  private bool _show;
+  private List<User> _allStudents = new();
+  private List<User> _ungroupedStudents = new();
+
+  private bool _showCreate;
+  private bool _showEdit;
+  private bool _showDelete;
+
   private string _name = "";
   private int _supId;
+  private int _leadId;
   private HashSet<int> _pick = new();
 
+  private int _editGroupId;
+  private string _editName = "";
+  private int _editSupId;
+  private int _editLeadId;
+  private HashSet<int> _editPick = new();
+  private List<User> _editCandidates = new();
+
+  private int _deleteGroupId;
+  private string _deleteGroupName = "";
+
+  private string? _error;
+  private string? _success;
+
+  private IEnumerable<User> SelectedCreateMembers => _ungroupedStudents.Where(s => _pick.Contains(s.Id));
+  private IEnumerable<User> SelectedEditMembers => _editCandidates.Where(s => _editPick.Contains(s.Id));
+
   protected override async Task OnInitializedAsync() => await Load();
+
   private async Task Load()
   {
-    _groups = await Db.Groups.Include(g => g.Supervisor).Include(g => g.Members).Include(g => g.Project).ToListAsync();
-    _supervisors = await Db.Users.Where(u => u.Role == UserRole.Supervisor && u.IsActive).ToListAsync();
-    _students = await Db.Users.Where(u => u.Role == UserRole.Student && u.IsActive).ToListAsync();
+    _groups = await Db.Groups
+      .Include(g => g.Supervisor)
+      .Include(g => g.Members)
+      .Include(g => g.Project)
+      .OrderBy(g => g.GroupName)
+      .ToListAsync();
+
+    _supervisors = await Db.Users
+      .Where(u => u.Role == UserRole.Supervisor && u.IsActive)
+      .OrderBy(u => u.FullName)
+      .ToListAsync();
+
+    _allStudents = await Db.Users
+      .Where(u => u.Role == UserRole.Student && u.IsActive)
+      .OrderBy(u => u.FullName)
+      .ToListAsync();
+
+    var groupedStudentIds = _groups
+      .SelectMany(g => g.Members)
+      .Where(m => m.Role == UserRole.Student)
+      .Select(m => m.Id)
+      .Distinct()
+      .ToHashSet();
+
+    _ungroupedStudents = _allStudents.Where(s => !groupedStudentIds.Contains(s.Id)).ToList();
   }
-  private void Toggle(int id, ChangeEventArgs e) { if ((bool?)e.Value == true) _pick.Add(id); else _pick.Remove(id); }
+
+  private void OpenCreate()
+  {
+    _error = null;
+    _success = null;
+    _showCreate = true;
+  }
+
+  private void CloseCreate()
+  {
+    _showCreate = false;
+    _name = "";
+    _supId = 0;
+    _leadId = 0;
+    _pick.Clear();
+  }
+
+  private void ToggleCreateMember(int id, ChangeEventArgs e)
+  {
+    if ((bool?)e.Value == true)
+    {
+      if (_pick.Count >= MaxMembers)
+      {
+        _error = $"A group can have at most {MaxMembers} members.";
+        return;
+      }
+      _pick.Add(id);
+    }
+    else
+    {
+      _pick.Remove(id);
+      if (!_pick.Contains(_leadId)) _leadId = 0;
+    }
+  }
+
   private async Task Create()
   {
-    if (string.IsNullOrWhiteSpace(_name) || _supId == 0) return;
-    var members = await Db.Users.Where(u => _pick.Contains(u.Id)).ToListAsync();
-    Db.Groups.Add(new Group { GroupName = _name, SupervisorId = _supId, CreatedAt = DateTime.UtcNow, Members = members });
+    _error = null;
+    _success = null;
+
+    if (string.IsNullOrWhiteSpace(_name))
+    {
+      _error = "Group name is required.";
+      return;
+    }
+
+    if (_supId == 0)
+    {
+      _error = "Please select a supervisor.";
+      return;
+    }
+
+    if (_pick.Count < MinMembers || _pick.Count > MaxMembers)
+    {
+      _error = $"Group members must be between {MinMembers} and {MaxMembers}.";
+      return;
+    }
+
+    if (_leadId == 0 || !_pick.Contains(_leadId))
+    {
+      _error = "Please select a valid group lead from selected members.";
+      return;
+    }
+
+    var supervisorGroups = await Db.Groups.CountAsync(g => g.SupervisorId == _supId);
+    if (supervisorGroups >= MaxGroupsPerSupervisor)
+    {
+      _error = $"Selected supervisor already has {MaxGroupsPerSupervisor} groups.";
+      return;
+    }
+
+    var selectedIds = _pick.ToList();
+
+    var alreadyGroupedIds = await Db.Groups
+      .Include(g => g.Members)
+      .Where(g => g.Members.Any(m => selectedIds.Contains(m.Id)))
+      .SelectMany(g => g.Members.Where(m => selectedIds.Contains(m.Id)))
+      .Select(m => m.Id)
+      .Distinct()
+      .ToListAsync();
+
+    if (alreadyGroupedIds.Any())
+    {
+      _error = "One or more selected students are already assigned to another group.";
+      await Load();
+      _pick.RemoveWhere(id => alreadyGroupedIds.Contains(id));
+      if (!_pick.Contains(_leadId)) _leadId = 0;
+      return;
+    }
+
+    var members = await Db.Users.Where(u => selectedIds.Contains(u.Id) && u.Role == UserRole.Student && u.IsActive).ToListAsync();
+    if (members.Count != selectedIds.Count)
+    {
+      _error = "Some selected students are no longer available.";
+      await Load();
+      return;
+    }
+
+    Db.Groups.Add(new Group
+    {
+      GroupName = _name.Trim(),
+      SupervisorId = _supId,
+      GroupLeadId = _leadId,
+      CreatedAt = DateTime.UtcNow,
+      Members = members
+    });
+
     await Db.SaveChangesAsync();
-    _show = false; _name = ""; _supId = 0; _pick.Clear();
+    await AuditService.LogActionAsync(await GetActorId(), "GroupCreate", $"Group '{_name.Trim()}' created with supervisor #{_supId} and lead #{_leadId}");
+
+    _success = "Group created successfully.";
+    CloseCreate();
     await Load();
+  }
+
+  private void OpenEdit(Group group)
+  {
+    _error = null;
+    _success = null;
+
+    _editGroupId = group.Id;
+    _editName = group.GroupName;
+    _editSupId = group.SupervisorId;
+    _editLeadId = group.GroupLeadId ?? 0;
+    _editPick = group.Members.Where(m => m.Role == UserRole.Student).Select(m => m.Id).ToHashSet();
+
+    var assignedElsewhere = _groups
+      .Where(g => g.Id != group.Id)
+      .SelectMany(g => g.Members)
+      .Where(m => m.Role == UserRole.Student)
+      .Select(m => m.Id)
+      .Distinct()
+      .ToHashSet();
+
+    _editCandidates = _allStudents
+      .Where(s => !assignedElsewhere.Contains(s.Id) || _editPick.Contains(s.Id))
+      .OrderBy(s => s.FullName)
+      .ToList();
+
+    if (!_editPick.Contains(_editLeadId))
+    {
+      _editLeadId = 0;
+    }
+
+    _showEdit = true;
+  }
+
+  private void CloseEdit()
+  {
+    _showEdit = false;
+    _editGroupId = 0;
+    _editName = "";
+    _editSupId = 0;
+    _editLeadId = 0;
+    _editPick.Clear();
+    _editCandidates.Clear();
+  }
+
+  private void ToggleEditMember(int id, ChangeEventArgs e)
+  {
+    if ((bool?)e.Value == true)
+    {
+      if (_editPick.Count >= MaxMembers)
+      {
+        _error = $"A group can have at most {MaxMembers} members.";
+        return;
+      }
+      _editPick.Add(id);
+    }
+    else
+    {
+      _editPick.Remove(id);
+      if (!_editPick.Contains(_editLeadId)) _editLeadId = 0;
+    }
+  }
+
+  private async Task SaveEdit()
+  {
+    _error = null;
+    _success = null;
+
+    if (_editGroupId == 0)
+    {
+      _error = "Invalid group selected.";
+      return;
+    }
+
+    if (string.IsNullOrWhiteSpace(_editName))
+    {
+      _error = "Group name is required.";
+      return;
+    }
+
+    if (_editSupId == 0)
+    {
+      _error = "Please select a supervisor.";
+      return;
+    }
+
+    if (_editPick.Count < MinMembers || _editPick.Count > MaxMembers)
+    {
+      _error = $"Group members must be between {MinMembers} and {MaxMembers}.";
+      return;
+    }
+
+    if (_editLeadId == 0 || !_editPick.Contains(_editLeadId))
+    {
+      _error = "Please select a valid group lead from selected members.";
+      return;
+    }
+
+    var supervisorGroups = await Db.Groups.CountAsync(g => g.SupervisorId == _editSupId && g.Id != _editGroupId);
+    if (supervisorGroups >= MaxGroupsPerSupervisor)
+    {
+      _error = $"Selected supervisor already has {MaxGroupsPerSupervisor} groups.";
+      return;
+    }
+
+    var selectedIds = _editPick.ToList();
+
+    var assignedElsewhere = await Db.Groups
+      .Include(g => g.Members)
+      .Where(g => g.Id != _editGroupId && g.Members.Any(m => selectedIds.Contains(m.Id)))
+      .SelectMany(g => g.Members.Where(m => selectedIds.Contains(m.Id)))
+      .Select(m => m.Id)
+      .Distinct()
+      .ToListAsync();
+
+    if (assignedElsewhere.Any())
+    {
+      _error = "One or more selected students are already assigned to another group.";
+      await Load();
+      return;
+    }
+
+    var group = await Db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == _editGroupId);
+    if (group == null)
+    {
+      _error = "Group not found.";
+      return;
+    }
+
+    var members = await Db.Users.Where(u => selectedIds.Contains(u.Id) && u.Role == UserRole.Student && u.IsActive).ToListAsync();
+    if (members.Count != selectedIds.Count)
+    {
+      _error = "Some selected students are no longer available.";
+      await Load();
+      return;
+    }
+
+    group.GroupName = _editName.Trim();
+    group.SupervisorId = _editSupId;
+    group.GroupLeadId = _editLeadId;
+
+    group.Members.Clear();
+    foreach (var m in members)
+    {
+      group.Members.Add(m);
+    }
+
+    await Db.SaveChangesAsync();
+
+    await AuditService.LogActionAsync(
+      await GetActorId(),
+      "GroupUpdate",
+      $"Group '{group.GroupName}' updated (Supervisor #{_editSupId}, Lead #{_editLeadId}, Members {members.Count})");
+
+    _success = "Group updated successfully.";
+    CloseEdit();
+    await Load();
+  }
+
+  private void OpenDelete(Group group)
+  {
+    _error = null;
+    _success = null;
+    _deleteGroupId = group.Id;
+    _deleteGroupName = group.GroupName;
+    _showDelete = true;
+  }
+
+  private void CloseDelete()
+  {
+    _showDelete = false;
+    _deleteGroupId = 0;
+    _deleteGroupName = "";
+  }
+
+  private async Task DeleteGroup()
+  {
+    _error = null;
+    _success = null;
+
+    if (_deleteGroupId == 0)
+    {
+      _error = "Invalid group selected.";
+      return;
+    }
+
+    var group = await Db.Groups.FirstOrDefaultAsync(g => g.Id == _deleteGroupId);
+    if (group == null)
+    {
+      _error = "Group not found.";
+      CloseDelete();
+      return;
+    }
+
+    Db.Groups.Remove(group);
+    await Db.SaveChangesAsync();
+
+    await AuditService.LogActionAsync(await GetActorId(), "GroupDelete", $"Group '{group.GroupName}' deleted");
+
+    _success = "Group deleted successfully.";
+    CloseDelete();
+    await Load();
+  }
+
+  private async Task<int> GetActorId()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    return int.TryParse(id, out var userId) ? userId : 0;
   }
 }

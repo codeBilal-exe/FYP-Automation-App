@@ -1,9 +1,10 @@
 @page "/supervisor/proposals"
-@page "/admin/proposals"
-@attribute [Authorize(Roles = "Supervisor,Coordinator,Admin")]
+@page "/coordinator/proposals"
+@attribute [Authorize(Roles = "Supervisor,Coordinator")]
 @inject ProposalService ProposalService
 @inject AuditService AuditService
 @inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header"><div><h1>Review Proposals</h1><div class="page-subtitle">Approve or reject pending proposals.</div></div></div>
@@ -66,12 +67,13 @@
 
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
+    var u = await ResolveCurrentUser();
+    if (u == null) return;
     var pending = u.Role switch
     {
       UserRole.Supervisor   => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.SubmittedToSupervisor),
       UserRole.Coordinator  => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.ApprovedBySupervisor),
-      _                     => await ProposalService.GetAllProposalsAsync()
+      _                     => new List<Proposal>()
     };
     _proposals = pending;
     var ids = _proposals.Select(p => p.StudentId).Distinct().ToList();
@@ -81,18 +83,12 @@
   private async Task Approve(Proposal p)
   {
     _error = null;
-    var u = AuthService.CurrentUser; if (u == null) return;
+    var u = await ResolveCurrentUser();
+    if (u == null) return;
 
     try
     {
-      if (u.Role == UserRole.Supervisor || u.Role == UserRole.Coordinator)
-      {
-        await ProposalService.ApproveBySupervisorOrCoordinator(p.Id, u.Id, u.Role);
-      }
-      else
-      {
-        await ProposalService.UpdateProposalStatusAsync(p.Id, ProposalStatus.ApprovedBySupervisor);
-      }
+      await ProposalService.ApproveBySupervisorOrCoordinator(p.Id, u.Id, u.Role);
 
       await AuditService.LogActionAsync(u.Id, "ProposalApprove", $"Proposal#{p.Id}");
       await OnInitializedAsync();
@@ -108,10 +104,19 @@
   private async Task ConfirmReject()
   {
     if (_rejecting == null) return;
-    var u = AuthService.CurrentUser; if (u == null) return;
+    var u = await ResolveCurrentUser();
+    if (u == null) return;
     await ProposalService.UpdateProposalStatusAsync(_rejecting.Id, ProposalStatus.Rejected, _reason);
     await AuditService.LogActionAsync(u.Id, "ProposalReject", $"Proposal#{_rejecting.Id}: {_reason}");
     _rejecting = null;
     await OnInitializedAsync();
+  }
+
+  private async Task<User?> ResolveCurrentUser()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(id, out var userId)) return null;
+    return await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
   }
 }

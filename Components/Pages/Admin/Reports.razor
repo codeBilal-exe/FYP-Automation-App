@@ -1,6 +1,8 @@
+@page "/coordinator/reports"
 @page "/admin/reports"
-@attribute [Authorize(Roles = "Admin,HOD,Coordinator")]
+@attribute [Authorize(Roles = "HOD,Coordinator")]
 @inject ReportService ReportService
+@inject AuthenticationStateProvider AuthProvider
 
 <div class="page-header"><div><h1>Reports & Analytics</h1><div class="page-subtitle">Generate, download, and archive reports.</div></div></div>
 
@@ -71,7 +73,9 @@
     _successPath = null;
     try
     {
-      var userId = AuthService.CurrentUser?.Id ?? 0;
+      var authState = await AuthProvider.GetAuthenticationStateAsync();
+      var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+      var userId = int.TryParse(idValue, out var parsed) ? parsed : 0;
       _successPath = await ReportService.GenerateReport(_reportType, _semester, _department, _fromDate, _toDate, _format, userId);
       await LoadArchive();
     }

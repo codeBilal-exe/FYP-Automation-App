@@ -57,6 +57,11 @@ namespace FYP_AutomationSystem.Data
                 .HasForeignKey(g => g.SupervisorId)
                 .OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<Group>()
+                .HasOne(g => g.GroupLead)
+                .WithMany()
+                .HasForeignKey(g => g.GroupLeadId)
+                .OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<Group>()
                 .HasMany(g => g.Members)
                 .WithMany()
                 .UsingEntity<Dictionary<string, object>>(

@@ -1,29 +1,84 @@
 @page "/admin/users"
-@attribute [Authorize(Roles = "Admin,HOD")]
+@attribute [Authorize(Roles = "Admin")]
 @inject UserService UserService
 @inject AuditService AuditService
+@inject AuthenticationStateProvider AuthProvider
 
 <div class="page-header">
-  <div><h1>Manage Users</h1><div class="page-subtitle">Create, edit and deactivate user accounts.</div></div>
+  <div>
+    <h1>Manage Users</h1>
+    <div class="page-subtitle">Create users, monitor active role counts, and manage account access.</div>
+  </div>
   <button class="btn btn-primary" @onclick="() => _showNew = true"><i class="bi bi-plus-lg me-1"></i>New User</button>
 </div>
 
+<div class="row g-3 mb-3">
+  @foreach (var role in _roleCards)
+  {
+    var isSelected = _selectedRole == role;
+    <div class="col-md-3 col-sm-6">
+      <button class="fcard lift w-100 text-start border-0 @(isSelected ? "user-role-card-active" : "")" @onclick="() => SelectRole(role)">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small text-uppercase">Active @role</div>
+            <div style="font-size:1.8rem;font-weight:800">@GetRoleCount(role)</div>
+          </div>
+          <i class="bi @GetRoleIcon(role) fs-3 text-muted"></i>
+        </div>
+      </button>
+    </div>
+  }
+</div>
+
+<div class="fcard mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label">Search Users</label>
+      <input class="form-control" placeholder="Search by name or email" @bind="_search" @bind:event="oninput" />
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Selected Role</label>
+      <div class="form-control" style="background:#f8fafc">@(_selectedRole?.ToString() ?? "None")</div>
+    </div>
+    <div class="col-md-3 d-flex gap-2">
+      <button class="btn btn-soft w-100" @onclick="ClearSearch">Clear Search</button>
+      <button class="btn btn-light w-100" @onclick="ClearRole">Clear Role</button>
+    </div>
+  </div>
+</div>
+
 <div class="fcard">
-  <table class="ftable">
-    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th class="text-end">Actions</th></tr></thead>
-    <tbody>
-      @foreach (var u in _users)
-      {
-        <tr>
-          <td><div class="d-flex align-items-center gap-2"><div class="avatar" style="width:32px;height:32px;font-size:.75rem">@u.FullName[0]</div>@u.FullName</div></td>
-          <td>@u.Email</td>
-          <td><span class="fbadge info">@u.Role</span></td>
-          <td>@(u.IsActive ? "Yes" : "No")</td>
-          <td class="text-end"><button class="btn btn-sm btn-outline-danger" @onclick="() => Deactivate(u)" disabled="@(!u.IsActive)"><i class="bi bi-trash"></i></button></td>
-        </tr>
-      }
-    </tbody>
-  </table>
+  @if (_selectedRole == null)
+  {
+    <div class="empty-state"><i class="bi bi-person-lines-fill"></i>Select a role card to view users.</div>
+  }
+  else if (!FilteredUsers.Any())
+  {
+    <div class="empty-state"><i class="bi bi-search"></i>No users found for this role/filter.</div>
+  }
+  else
+  {
+    <table class="ftable">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th class="text-end">Actions</th></tr></thead>
+      <tbody>
+        @foreach (var u in FilteredUsers)
+        {
+          <tr>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="avatar" style="width:32px;height:32px;font-size:.75rem">@GetInitial(u.FullName)</div>
+                @u.FullName
+              </div>
+            </td>
+            <td>@u.Email</td>
+            <td><span class="fbadge info">@u.Role</span></td>
+            <td>@(u.IsActive ? "Yes" : "No")</td>
+            <td class="text-end"><button class="btn btn-sm btn-outline-danger" @onclick="() => Deactivate(u)" disabled="@(!u.IsActive)"><i class="bi bi-trash"></i></button></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
 </div>
 
 @if (_showNew)
@@ -48,21 +103,82 @@
 }
 
 @code {
+  private readonly UserRole[] _roleCards = [UserRole.HOD, UserRole.Supervisor, UserRole.Coordinator, UserRole.Student];
+
   private List<User> _users = new();
   private bool _showNew;
+  private string _search = "";
+  private UserRole? _selectedRole;
   private NewUser _n = new();
-  private class NewUser { public string FullName{get;set;}=""; public string Email{get;set;}=""; public string Password{get;set;}=""; public UserRole Role{get;set;}=UserRole.Student; }
-  protected override async Task OnInitializedAsync() => _users = await UserService.GetAllUsers();
+
+  private class NewUser
+  {
+    public string FullName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+    public UserRole Role { get; set; } = UserRole.Student;
+  }
+
+  private IEnumerable<User> FilteredUsers => _selectedRole == null
+    ? Enumerable.Empty<User>()
+    : _users
+      .Where(u => u.Role == _selectedRole.Value)
+      .Where(u => string.IsNullOrWhiteSpace(_search)
+        || u.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || u.Email.Contains(_search, StringComparison.OrdinalIgnoreCase))
+      .OrderBy(u => u.FullName);
+
+  protected override async Task OnInitializedAsync() => await LoadUsers();
+
+  private async Task LoadUsers()
+  {
+    _users = await UserService.GetAllUsers();
+  }
+
+  private void SelectRole(UserRole role)
+  {
+    _selectedRole = _selectedRole == role ? null : role;
+  }
+
+  private void ClearRole() => _selectedRole = null;
+  private void ClearSearch() => _search = "";
+
+  private int GetRoleCount(UserRole role) => _users.Count(u => u.IsActive && u.Role == role);
+
+  private static string GetRoleIcon(UserRole role) => role switch
+  {
+    UserRole.HOD => "bi-person-workspace",
+    UserRole.Supervisor => "bi-person-badge",
+    UserRole.Coordinator => "bi-kanban",
+    UserRole.Student => "bi-mortarboard",
+    _ => "bi-person"
+  };
+
+  private static string GetInitial(string name) => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[0].ToString().ToUpperInvariant();
+
+  private async Task<int> GetActorId()
+  {
+    var authState = await AuthProvider.GetAuthenticationStateAsync();
+    var id = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    return int.TryParse(id, out var userId) ? userId : 0;
+  }
+
   private async Task Create()
   {
     var u = await UserService.CreateUser(_n.FullName, _n.Email, _n.Password, _n.Role);
-    if (u != null) { await AuditService.LogActionAsync(AuthService.CurrentUser?.Id ?? 0, "UserCreate", _n.Email); }
-    _showNew = false; _n = new(); _users = await UserService.GetAllUsers();
+    if (u != null)
+    {
+      await AuditService.LogActionAsync(await GetActorId(), "UserCreate", _n.Email);
+    }
+    _showNew = false;
+    _n = new();
+    await LoadUsers();
   }
+
   private async Task Deactivate(User u)
   {
     await UserService.DeactivateUser(u.Id);
-    await AuditService.LogActionAsync(AuthService.CurrentUser?.Id ?? 0, "UserDeactivate", u.Email);
-    _users = await UserService.GetAllUsers();
+    await AuditService.LogActionAsync(await GetActorId(), "UserDeactivate", u.Email);
+    await LoadUsers();
   }
 }

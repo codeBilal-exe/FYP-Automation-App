@@ -86,8 +86,8 @@ builder.Services.AddAuthentication(options =>
 }).AddCookie(options =>
 {
     options.Cookie.Name = "FYP_AutomationSystem.Auth";
-    options.LoginPath = "/login";
-    options.AccessDeniedPath = "/login";
+    options.LoginPath = "/";
+    options.AccessDeniedPath = "/";
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
 });
@@ -122,13 +122,13 @@ app.MapPost("/auth/login", async (HttpContext httpContext, AuthService authServi
 {
     var form = await httpContext.Request.ReadFormAsync();
     var email = form["email"].ToString().Trim();
-    var password = form["password"].ToString();
+    var password = form["password"].ToString().Trim();
 
     var user = await authService.Login(email, password);
     if (user == null)
     {
         var error = authService.LastLoginError == "Account locked. Try again later." ? "locked" : "invalid";
-        return Results.Redirect($"/login?error={error}&email={Uri.EscapeDataString(email)}", false);
+        return Results.Redirect($"/?error={error}&email={Uri.EscapeDataString(email)}", false);
     }
 
     var claims = new List<Claim>
@@ -161,7 +161,7 @@ app.MapGet("/auth/logout", async (HttpContext httpContext) =>
 {
     await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     AuthService.CurrentUser = null;
-    return Results.Redirect("/login", false);
+    return Results.Redirect("/", false);
 });
 
 app.MapStaticAssets();

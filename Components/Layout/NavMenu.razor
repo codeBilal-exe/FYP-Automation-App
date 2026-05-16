@@ -26,14 +26,18 @@
             </Authorized>
         </AuthorizeView>
     }
-    else if (Role == "Admin" || Role == "Coordinator")
+    else if (Role == "Coordinator")
+    {
+        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/coordinator/groups"><i class="bi bi-diagram-3"></i><span>Manage Groups</span></NavLink>
+        <NavLink class="nav-item-link" href="/coordinator/proposals"><i class="bi bi-clipboard-check"></i><span>Proposals</span></NavLink>
+        <NavLink class="nav-item-link" href="/coordinator/viva"><i class="bi bi-calendar-event"></i><span>Viva Scheduling</span></NavLink>
+        <NavLink class="nav-item-link" href="/coordinator/reports"><i class="bi bi-bar-chart"></i><span>Reports</span></NavLink>
+    }
+    else if (Role == "Admin")
     {
         <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/users"><i class="bi bi-person-gear"></i><span>Manage Users</span></NavLink>
-        <NavLink class="nav-item-link" href="/admin/groups"><i class="bi bi-diagram-3"></i><span>Manage Groups</span></NavLink>
-        <NavLink class="nav-item-link" href="/admin/proposals"><i class="bi bi-clipboard-check"></i><span>Proposals</span></NavLink>
-        <NavLink class="nav-item-link" href="/admin/viva"><i class="bi bi-calendar-event"></i><span>Viva Scheduling</span></NavLink>
-        <NavLink class="nav-item-link" href="/admin/reports"><i class="bi bi-bar-chart"></i><span>Reports</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/audit"><i class="bi bi-shield-check"></i><span>Audit Logs</span></NavLink>
     }
     else if (Role == "Panel")

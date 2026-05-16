@@ -5,6 +5,7 @@ namespace FYP_AutomationSystem.Models
         public int Id { get; set; }
         public string GroupName { get; set; } = string.Empty;
         public int SupervisorId { get; set; }
+        public int? GroupLeadId { get; set; }
         public DateTime CreatedAt { get; set; }
         public string Semester { get; set; } = string.Empty;
         public string Department { get; set; } = string.Empty;
@@ -14,6 +15,7 @@ namespace FYP_AutomationSystem.Models
 
         // Navigation properties
         public User? Supervisor { get; set; }
+        public User? GroupLead { get; set; }
         public ICollection<User> Members { get; set; } = new List<User>();
         public Project? Project { get; set; }
     }

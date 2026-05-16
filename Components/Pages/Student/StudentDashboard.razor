@@ -1,7 +1,7 @@
 @page "/student/dashboard"
 @attribute [Authorize(Roles = "Student")]
+@inject AuthenticationStateProvider AuthProvider
 @inject AppDbContext Db
-@inject ProposalService ProposalService
 @inject MilestoneService MilestoneService
 @inject NotificationService NotificationService
 @inject DocumentService DocumentService
@@ -11,6 +11,7 @@
     <h1>Welcome back, @(_userName)</h1>
     <div class="page-subtitle">Here is what's happening with your project.</div>
   </div>
+  <button class="btn btn-soft" @onclick="LoadDashboard" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
 @if (_loading) { <LoadingSpinner Message="Loading dashboard…" /> }
@@ -79,23 +80,56 @@ else
 
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    _userName = u.FullName;
+    await LoadDashboard();
+  }
 
-    var group = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Project), g => g.Members.Any(m => m.Id == u.Id));
+  private async Task LoadDashboard()
+  {
+    _loading = true;
+
+    var authState = await AuthProvider.GetAuthenticationStateAsync();
+    var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(idValue, out var userId))
+    {
+      _userName = "";
+      _milestones.Clear();
+      _notifications.Clear();
+      _project = null;
+      _pending = 0;
+      _docCount = 0;
+      _grade = 0;
+      _overall = 0;
+      _loading = false;
+      return;
+    }
+
+    var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+    _userName = user?.FullName ?? "";
+
+    var group = await Db.Groups.AsNoTracking()
+      .Include(g => g.Members)
+      .Include(g => g.Project)
+      .FirstOrDefaultAsync(g => g.Members.Any(m => m.Id == userId));
+
+    _project = null;
+    _milestones = new List<Milestone>();
+    _pending = 0;
+    _docCount = 0;
+    _grade = 0;
+    _overall = 0;
+
     if (group?.Project != null)
     {
       _project = group.Project;
       _milestones = await MilestoneService.GetMilestonesByProjectAsync(_project.Id);
       _pending = _milestones.Count(m => m.Status != MilestoneStatus.Completed);
       _docCount = (await DocumentService.GetDocumentsByProject(_project.Id)).Count;
-      var ev = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-        .FirstOrDefaultAsync(Db.Evaluations.Where(e => e.ProjectId == _project.Id && e.IsLocked));
+      var ev = await Db.Evaluations.AsNoTracking().FirstOrDefaultAsync(e => e.ProjectId == _project.Id && e.IsLocked);
       _grade = ev != null ? (int)ev.TotalScore : 0;
       _overall = _milestones.Count == 0 ? 0 : (int)_milestones.Average(m => m.ProgressPercent);
     }
-    _notifications = await NotificationService.GetNotificationsByUser(u.Id);
+
+    _notifications = await NotificationService.GetNotificationsByUser(userId);
     _loading = false;
   }
 

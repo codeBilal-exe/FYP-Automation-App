@@ -1,5 +1,6 @@
+@page "/coordinator/viva"
 @page "/admin/viva"
-@attribute [Authorize(Roles = "Admin,Coordinator,HOD")]
+@attribute [Authorize(Roles = "Coordinator")]
 @inject AppDbContext Db
 @inject VivaService VivaService
 @using Microsoft.EntityFrameworkCore

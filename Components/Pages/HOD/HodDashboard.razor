@@ -1,72 +1,81 @@
 @page "/hod/dashboard"
 @attribute [Authorize(Roles = "HOD")]
+@inject AuthenticationStateProvider AuthProvider
 @inject ProposalService ProposalService
 @inject NotificationService NotificationService
-@inject ReportService ReportService
 @inject AppDbContext Db
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
   <div><h1>HOD Dashboard</h1><div class="page-subtitle">Final proposal approvals and reporting overview.</div></div>
+  <button class="btn btn-soft" @onclick="Load" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-4"><StatCard Icon="bi-clipboard-check" Label="Pending HOD Review" Value="@_pendingCount" /></div>
-  <div class="col-md-4"><StatCard Icon="bi-folder-check" IconClass="success" Label="Active Projects" Value="@_activeProjects" /></div>
-  <div class="col-md-4"><StatCard Icon="bi-file-earmark-bar-graph" IconClass="info" Label="Reports This Semester" Value="@_reportsThisSemester" /></div>
-</div>
-
-<div class="row g-3">
-  <div class="col-lg-8">
-    <div class="fcard">
-      <div class="fcard-title"><i class="bi bi-hourglass-split"></i> @_pendingCount Proposals Awaiting Your Review</div>
-      @if (!_pending.Any())
-      {
-        <div class="text-muted small">No pending proposals.</div>
-      }
-      else
-      {
-        @foreach (var item in _pending)
-        {
-          <div class="py-2 border-bottom d-flex justify-content-between align-items-center">
-            <div>
-              <div class="fw-semibold">@item.Title</div>
-              <div class="small text-muted">Group: @item.GroupName | Coordinator Approved: @item.CoordinatorApprovedAt?.ToString("yyyy-MM-dd HH:mm")</div>
-            </div>
-            <a class="btn btn-sm btn-primary" href="/hod/proposals">Review</a>
-          </div>
-        }
-      }
-    </div>
+@if (_loading)
+{
+  <LoadingSpinner Message="Refreshing dashboard…" />
+}
+else
+{
+  <div class="row g-3 mb-4">
+    <div class="col-md-4"><StatCard Icon="bi-clipboard-check" Label="Pending HOD Review" Value="@_pendingCount" /></div>
+    <div class="col-md-4"><StatCard Icon="bi-folder-check" IconClass="success" Label="Active Projects" Value="@_activeProjects" /></div>
+    <div class="col-md-4"><StatCard Icon="bi-file-earmark-bar-graph" IconClass="info" Label="Reports This Semester" Value="@_reportsThisSemester" /></div>
   </div>
 
-  <div class="col-lg-4">
-    <div class="fcard">
-      <div class="fcard-title"><i class="bi bi-bell"></i> Unread Notifications</div>
-      @if (!_notifications.Any())
-      {
-        <div class="text-muted small">No unread notifications.</div>
-      }
-      else
-      {
-        @foreach (var n in _notifications.Take(8))
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-hourglass-split"></i> @_pendingCount Proposals Awaiting Your Review</div>
+        @if (!_pending.Any())
         {
-          <div class="py-2 border-bottom">
-            <div class="d-flex justify-content-between align-items-start gap-2">
+          <div class="text-muted small">No pending proposals.</div>
+        }
+        else
+        {
+          @foreach (var item in _pending)
+          {
+            <div class="py-2 border-bottom d-flex justify-content-between align-items-center">
               <div>
-                <div class="fw-semibold">@n.Title</div>
-                <div class="small text-muted">@n.Message</div>
+                <div class="fw-semibold">@item.Title</div>
+                <div class="small text-muted">Group: @item.GroupName | Coordinator Approved: @item.CoordinatorApprovedAt?.ToString("yyyy-MM-dd HH:mm")</div>
               </div>
-              <button class="btn btn-sm btn-soft" @onclick="() => MarkAsRead(n.Id)">Mark read</button>
+              <a class="btn btn-sm btn-primary" href="/hod/proposals">Review</a>
             </div>
-          </div>
+          }
         }
-      }
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-bell"></i> Unread Notifications</div>
+        @if (!_notifications.Any())
+        {
+          <div class="text-muted small">No unread notifications.</div>
+        }
+        else
+        {
+          @foreach (var n in _notifications.Take(8))
+          {
+            <div class="py-2 border-bottom">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-semibold">@n.Title</div>
+                  <div class="small text-muted">@n.Message</div>
+                </div>
+                <button class="btn btn-sm btn-soft" @onclick="() => MarkAsRead(n.Id)">Mark read</button>
+              </div>
+            </div>
+          }
+        }
+      </div>
     </div>
   </div>
-</div>
+}
 
 @code {
+  private bool _loading = true;
   private int _pendingCount;
   private int _activeProjects;
   private int _reportsThisSemester;
@@ -87,11 +96,22 @@
 
   private async Task Load()
   {
-    var user = AuthService.CurrentUser;
-    if (user == null) return;
+    _loading = true;
+    var authState = await AuthProvider.GetAuthenticationStateAsync();
+    var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(idValue, out var userId))
+    {
+      _pending.Clear();
+      _notifications.Clear();
+      _pendingCount = 0;
+      _activeProjects = 0;
+      _reportsThisSemester = 0;
+      _loading = false;
+      return;
+    }
 
     var pendingProposals = await ProposalService.GetPendingHODProposalsAsync();
-    var groupLookup = await Db.Groups.ToDictionaryAsync(g => g.Id, g => g.GroupName);
+    var groupLookup = await Db.Groups.AsNoTracking().ToDictionaryAsync(g => g.Id, g => g.GroupName);
 
     _pending = pendingProposals.Select(p => new PendingProposalItem
     {
@@ -101,12 +121,13 @@
     }).ToList();
 
     _pendingCount = _pending.Count;
-    _activeProjects = await Db.Projects.CountAsync(p => p.Status == ProjectStatus.Active);
+    _activeProjects = await Db.Projects.AsNoTracking().CountAsync(p => p.Status == ProjectStatus.Active);
 
-    var currentSemester = await Db.Groups.Where(g => !string.IsNullOrWhiteSpace(g.Semester)).Select(g => g.Semester).OrderByDescending(s => s).FirstOrDefaultAsync() ?? "N/A";
-    _reportsThisSemester = await Db.ReportArchives.CountAsync(r => r.Semester == currentSemester);
+    var currentSemester = await Db.Groups.AsNoTracking().Where(g => !string.IsNullOrWhiteSpace(g.Semester)).Select(g => g.Semester).OrderByDescending(s => s).FirstOrDefaultAsync() ?? "N/A";
+    _reportsThisSemester = await Db.ReportArchives.AsNoTracking().CountAsync(r => r.Semester == currentSemester);
 
-    _notifications = await NotificationService.GetUnreadNotifications(user.Id);
+    _notifications = await NotificationService.GetUnreadNotifications(userId);
+    _loading = false;
   }
 
   private async Task MarkAsRead(int id)

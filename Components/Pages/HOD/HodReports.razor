@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "HOD")]
 @inject ReportService ReportService
 @inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
 
 <div class="page-header">
   <div><h1>HOD Reports</h1><div class="page-subtitle">Generate and archive accreditation-ready reports.</div></div>
@@ -74,7 +75,9 @@
     _successPath = null;
     try
     {
-      var userId = AuthService.CurrentUser?.Id ?? 0;
+      var authState = await AuthProvider.GetAuthenticationStateAsync();
+      var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+      var userId = int.TryParse(idValue, out var parsed) ? parsed : 0;
       _successPath = await ReportService.GenerateReport(_reportType, _semester, _department, _fromDate, _toDate, _format, userId);
       await LoadArchive();
     }

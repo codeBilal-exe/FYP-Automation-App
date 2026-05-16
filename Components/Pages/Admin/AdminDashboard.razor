@@ -6,55 +6,109 @@
 @inject IJSRuntime JS
 @using Microsoft.EntityFrameworkCore
 
-<div class="page-header"><div><h1>Admin Dashboard</h1><div class="page-subtitle">System overview and key metrics.</div></div></div>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-3 col-sm-6"><StatCard Icon="bi-folder" Label="Total Projects" Value="@_projects" /></div>
-  <div class="col-md-3 col-sm-6"><StatCard Icon="bi-mortarboard" IconClass="info" Label="Active Students" Value="@_students" /></div>
-  <div class="col-md-3 col-sm-6"><StatCard Icon="bi-person-badge" IconClass="success" Label="Supervisors" Value="@_supervisors" /></div>
-  <div class="col-md-3 col-sm-6"><StatCard Icon="bi-calendar-event" IconClass="warning" Label="Upcoming Vivas" Value="@_vivas" /></div>
+<div class="page-header">
+  <div><h1>Admin Dashboard</h1><div class="page-subtitle">System overview and key metrics.</div></div>
+  <button class="btn btn-soft" @onclick="RefreshDashboard" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
-<div class="row g-3">
-  <div class="col-lg-6"><div class="fcard"><div class="fcard-title"><i class="bi bi-pie-chart"></i> Projects by Status</div><canvas id="chartStatus" height="200"></canvas></div></div>
-  <div class="col-lg-6"><div class="fcard"><div class="fcard-title"><i class="bi bi-bar-chart"></i> Milestones Completed / Month</div><canvas id="chartMs" height="200"></canvas></div></div>
-  <div class="col-12"><div class="fcard"><div class="fcard-title"><i class="bi bi-graph-up"></i> Proposal Submissions</div><canvas id="chartProps" height="120"></canvas></div></div>
-</div>
+@if (_loading)
+{
+  <LoadingSpinner Message="Refreshing dashboard…" />
+}
+else
+{
+  <div class="fcard mb-3">
+    <div class="fcard-title"><i class="bi bi-people"></i> Active User Statistics</div>
+    <div class="row g-3">
+      <div class="col-md-2 col-sm-6"><StatCard Icon="bi-people-fill" Label="Total Active Users" Value="@_totalActiveUsers" /></div>
+      <div class="col-md-2 col-sm-6"><StatCard Icon="bi-person-workspace" IconClass="info" Label="Active HODs" Value="@_activeHods" /></div>
+      <div class="col-md-2 col-sm-6"><StatCard Icon="bi-person-badge" IconClass="success" Label="Active Supervisors" Value="@_activeSupervisors" /></div>
+      <div class="col-md-2 col-sm-6"><StatCard Icon="bi-kanban" IconClass="warning" Label="Active Coordinators" Value="@_activeCoordinators" /></div>
+      <div class="col-md-2 col-sm-6"><StatCard Icon="bi-mortarboard" IconClass="info" Label="Active Students" Value="@_activeStudents" /></div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-folder" Label="Total Projects" Value="@_projects" /></div>
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-file-earmark-check" IconClass="success" Label="Total Proposals" Value="@_proposals" /></div>
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-flag" IconClass="info" Label="Total Milestones" Value="@_milestones" /></div>
+    <div class="col-md-3 col-sm-6"><StatCard Icon="bi-calendar-event" IconClass="warning" Label="Upcoming Vivas" Value="@_vivas" /></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6"><div class="fcard"><div class="fcard-title"><i class="bi bi-pie-chart"></i> Projects by Status</div><canvas id="chartStatus" height="200"></canvas></div></div>
+    <div class="col-lg-6"><div class="fcard"><div class="fcard-title"><i class="bi bi-bar-chart"></i> Milestones Completed / Month</div><canvas id="chartMs" height="200"></canvas></div></div>
+    <div class="col-12"><div class="fcard"><div class="fcard-title"><i class="bi bi-graph-up"></i> Proposal Submissions</div><canvas id="chartProps" height="120"></canvas></div></div>
+  </div>
+}
 
 @code {
-  private int _projects, _students, _supervisors, _vivas;
+  private int _projects, _proposals, _milestones, _vivas;
+  private int _totalActiveUsers, _activeHods, _activeSupervisors, _activeCoordinators, _activeStudents;
+  private bool _loading = true;
+  private bool _chartsPending;
   private Dictionary<string,int> _byStatus = new();
   private Dictionary<string,int> _byMonth = new();
   private Dictionary<string,int> _props = new();
 
   protected override async Task OnInitializedAsync()
   {
-    _projects = await Db.Projects.CountAsync();
-    _students = await Db.Users.CountAsync(u => u.Role == UserRole.Student && u.IsActive);
-    _supervisors = await Db.Users.CountAsync(u => u.Role == UserRole.Supervisor && u.IsActive);
-    _vivas = await Db.VivaSlots.CountAsync(v => v.ScheduledAt > DateTime.UtcNow && v.Status == VivaStatus.Scheduled);
+    await RefreshDashboard();
+  }
+
+  private async Task RefreshDashboard()
+  {
+    _loading = true;
+    _chartsPending = false;
+
+    _projects = await Db.Projects.AsNoTracking().CountAsync();
+    _proposals = await Db.Proposals.AsNoTracking().CountAsync();
+    _milestones = await Db.Milestones.AsNoTracking().CountAsync();
+    _vivas = await Db.VivaSlots.AsNoTracking().CountAsync(v => v.ScheduledAt > DateTime.UtcNow && v.Status == VivaStatus.Scheduled);
+
+    var activeUsers = await Db.Users.AsNoTracking().Where(u => u.IsActive).ToListAsync();
+    _totalActiveUsers = activeUsers.Count;
+    _activeHods = activeUsers.Count(u => u.Role == UserRole.HOD);
+    _activeSupervisors = activeUsers.Count(u => u.Role == UserRole.Supervisor);
+    _activeCoordinators = activeUsers.Count(u => u.Role == UserRole.Coordinator);
+    _activeStudents = activeUsers.Count(u => u.Role == UserRole.Student);
+
     _byStatus = await ReportService.GetProjectsByStatus();
     _byMonth = await ReportService.GetMilestoneCompletionByMonth();
     _props = await ReportService.GetProposalSubmissionTrend();
+
+    _loading = false;
+    _chartsPending = true;
+    await InvokeAsync(StateHasChanged);
   }
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
-    if (!firstRender) return;
+    if (_loading || !_chartsPending) return;
+
+    var statusLabels = _byStatus.Keys.ToArray();
+    var statusValues = _byStatus.Values.ToArray();
+    var monthLabels = _byMonth.Keys.ToArray();
+    var monthValues = _byMonth.Values.ToArray();
+    var proposalLabels = _props.Keys.ToArray();
+    var proposalValues = _props.Values.ToArray();
+
     await JS.InvokeVoidAsync("fypSite.drawChart", "chartStatus", new {
       type = "doughnut",
-      data = new { labels = _byStatus.Keys.ToArray(), datasets = new[] { new { data = _byStatus.Values.ToArray(), backgroundColor = new[]{"#94a3b8","#0ea5e9","#22c55e","#64748b"} } } },
+      data = new { labels = statusLabels, datasets = new[] { new { data = statusValues, backgroundColor = new[]{"#94a3b8","#0ea5e9","#22c55e","#64748b"} } } },
       options = new { animation = new { easing = "easeInOutQuart" }, plugins = new { legend = new { position = "bottom" } } }
     });
     await JS.InvokeVoidAsync("fypSite.drawChart", "chartMs", new {
       type = "bar",
-      data = new { labels = _byMonth.Keys.ToArray(), datasets = new[] { new { label = "Completed", data = _byMonth.Values.ToArray(), backgroundColor = "#6366f1" } } },
+      data = new { labels = monthLabels, datasets = new[] { new { label = "Completed", data = monthValues, backgroundColor = "#6366f1" } } },
       options = new { animation = new { easing = "easeInOutQuart" }, plugins = new { legend = new { display = false } } }
     });
     await JS.InvokeVoidAsync("fypSite.drawChart", "chartProps", new {
       type = "line",
-      data = new { labels = _props.Keys.ToArray(), datasets = new[] { new { label = "Submissions", data = _props.Values.ToArray(), borderColor = "#22c55e", backgroundColor = "rgba(34,197,94,.15)", fill = true, tension = 0.35 } } },
+      data = new { labels = proposalLabels, datasets = new[] { new { label = "Submissions", data = proposalValues, borderColor = "#22c55e", backgroundColor = "rgba(34,197,94,.15)", fill = true, tension = 0.35 } } },
       options = new { animation = new { easing = "easeInOutQuart" } }
     });
+
+    _chartsPending = false;
   }
 }

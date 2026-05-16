@@ -1,62 +1,73 @@
 @page "/supervisor/dashboard"
 @attribute [Authorize(Roles = "Supervisor,Panel")]
+@inject AuthenticationStateProvider AuthProvider
 @inject AppDbContext Db
 @inject ProposalService ProposalService
-@inject EvaluationService EvaluationService
 @using Microsoft.EntityFrameworkCore
 
-<div class="page-header"><div><h1>Supervisor Dashboard</h1><div class="page-subtitle">Welcome, @_userName.</div></div></div>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-4 col-sm-6"><StatCard Icon="bi-diagram-3" Label="Assigned Groups" Value="@_groupCount" /></div>
-  <div class="col-md-4 col-sm-6"><StatCard Icon="bi-clipboard-check" IconClass="warning" Label="Pending Proposals" Value="@_pendingProposals" /></div>
-  <div class="col-md-4 col-sm-6"><StatCard Icon="bi-star" IconClass="success" Label="Evaluations Done" Value="@_evalCount" /></div>
+<div class="page-header">
+  <div><h1>Supervisor Dashboard</h1><div class="page-subtitle">Welcome, @_userName.</div></div>
+  <button class="btn btn-soft" @onclick="LoadDashboard" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
-<div class="row g-3">
-  <div class="col-lg-7">
-    <div class="fcard">
-      <div class="fcard-title"><i class="bi bi-diagram-3"></i> My Groups</div>
-      @if (!_groups.Any()) { <div class="empty-state"><i class="bi bi-people"></i>No groups assigned.</div> }
-      else
-      {
-        <table class="ftable">
-          <thead><tr><th>Group</th><th>Project</th><th>Members</th><th>Status</th></tr></thead>
-          <tbody>
-            @foreach (var g in _groups)
-            {
-              <tr>
-                <td>@g.GroupName</td>
-                <td>@(g.Project?.Title ?? "—")</td>
-                <td>@g.Members.Count</td>
-                <td><span class="fbadge @(g.Project?.Status.ToString().ToLower() ?? "pending")">@(g.Project?.Status.ToString() ?? "—")</span></td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      }
-    </div>
+@if (_loading)
+{
+  <LoadingSpinner Message="Refreshing dashboard…" />
+}
+else
+{
+  <div class="row g-3 mb-4">
+    <div class="col-md-4 col-sm-6"><StatCard Icon="bi-diagram-3" Label="Assigned Groups" Value="@_groupCount" /></div>
+    <div class="col-md-4 col-sm-6"><StatCard Icon="bi-clipboard-check" IconClass="warning" Label="Pending Proposals" Value="@_pendingProposals" /></div>
+    <div class="col-md-4 col-sm-6"><StatCard Icon="bi-star" IconClass="success" Label="Evaluations Done" Value="@_evalCount" /></div>
   </div>
-  <div class="col-lg-5">
-    <div class="fcard">
-      <div class="fcard-title"><i class="bi bi-clipboard-check"></i> Pending Proposals</div>
-      @if (!_pending.Any()) { <div class="text-muted small">All caught up.</div> }
-      else
-      {
-        @foreach (var p in _pending.Take(5))
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-diagram-3"></i> My Groups</div>
+        @if (!_groups.Any()) { <div class="empty-state"><i class="bi bi-people"></i>No groups assigned.</div> }
+        else
         {
-          <div class="py-2 border-bottom">
-            <div class="d-flex justify-content-between"><strong>@p.Title</strong><span class="fbadge active">@p.Status</span></div>
-            <div class="small text-muted">@p.SubmittedAt.ToString("MMM dd, yyyy")</div>
-          </div>
+          <table class="ftable">
+            <thead><tr><th>Group</th><th>Project</th><th>Members</th><th>Status</th></tr></thead>
+            <tbody>
+              @foreach (var g in _groups)
+              {
+                <tr>
+                  <td>@g.GroupName</td>
+                  <td>@(g.Project?.Title ?? "—")</td>
+                  <td>@g.Members.Count</td>
+                  <td><span class="fbadge @(g.Project?.Status.ToString().ToLower() ?? "pending")">@(g.Project?.Status.ToString() ?? "—")</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
         }
-        <a href="/supervisor/proposals" class="btn btn-soft btn-sm mt-3">Review all</a>
-      }
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-clipboard-check"></i> Pending Proposals</div>
+        @if (!_pending.Any()) { <div class="text-muted small">All caught up.</div> }
+        else
+        {
+          @foreach (var p in _pending.Take(5))
+          {
+            <div class="py-2 border-bottom">
+              <div class="d-flex justify-content-between"><strong>@p.Title</strong><span class="fbadge active">@p.Status</span></div>
+              <div class="small text-muted">@p.SubmittedAt.ToString("MMM dd, yyyy")</div>
+            </div>
+          }
+          <a href="/supervisor/proposals" class="btn btn-soft btn-sm mt-3">Review all</a>
+        }
+      </div>
     </div>
   </div>
-</div>
+}
 
 @code {
+  private bool _loading = true;
   private string _userName = "";
   private int _groupCount, _pendingProposals, _evalCount;
   private List<Group> _groups = new();
@@ -64,12 +75,42 @@
 
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    _userName = u.FullName;
-    _groups = await Db.Groups.Include(g => g.Members).Include(g => g.Project).Where(g => g.SupervisorId == u.Id).ToListAsync();
+    await LoadDashboard();
+  }
+
+  private async Task LoadDashboard()
+  {
+    _loading = true;
+    var authState = await AuthProvider.GetAuthenticationStateAsync();
+    var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(idValue, out var userId))
+    {
+      _userName = "";
+      _groups.Clear();
+      _pending.Clear();
+      _groupCount = 0;
+      _pendingProposals = 0;
+      _evalCount = 0;
+      _loading = false;
+      return;
+    }
+
+    var user = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+    _userName = user?.FullName ?? "";
+
+    _groups = await Db.Groups.AsNoTracking()
+      .Include(g => g.Members)
+      .Include(g => g.Project)
+      .Where(g => g.SupervisorId == userId)
+      .ToListAsync();
     _groupCount = _groups.Count;
-    _pending = await ProposalService.GetProposalsByStatusAsync(ProposalStatus.SubmittedToSupervisor);
+
+    var proposalPool = await ProposalService.GetProposalsByStatusAsync(ProposalStatus.SubmittedToSupervisor);
+    var groupIds = _groups.Select(g => g.Id).ToHashSet();
+    _pending = proposalPool.Where(p => groupIds.Contains(p.GroupId)).ToList();
     _pendingProposals = _pending.Count;
-    _evalCount = (await EvaluationService.GetUserEvaluations(u.Id)).Count;
+
+    _evalCount = await Db.Evaluations.AsNoTracking().CountAsync(e => e.EvaluatorId == userId);
+    _loading = false;
   }
 }
