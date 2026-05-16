@@ -70,6 +70,18 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9FcnJvci5yYXpvcg==
 build_metadata.AdditionalFiles.CssScope = 
 
+[/Users/Raheem/Desktop/repo/Fyp-Automation/Components/Pages/HOD/HodDashboard.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9IT0QvSG9kRGFzaGJvYXJkLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Desktop/repo/Fyp-Automation/Components/Pages/HOD/HodProposals.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9IT0QvSG9kUHJvcG9zYWxzLnJhem9y
+build_metadata.AdditionalFiles.CssScope = 
+
+[/Users/Raheem/Desktop/repo/Fyp-Automation/Components/Pages/HOD/HodReports.razor]
+build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9IT0QvSG9kUmVwb3J0cy5yYXpvcg==
+build_metadata.AdditionalFiles.CssScope = 
+
 [/Users/Raheem/Desktop/repo/Fyp-Automation/Components/Pages/Home.razor]
 build_metadata.AdditionalFiles.TargetPath = Q29tcG9uZW50cy9QYWdlcy9Ib21lLnJhem9y
 build_metadata.AdditionalFiles.CssScope = 

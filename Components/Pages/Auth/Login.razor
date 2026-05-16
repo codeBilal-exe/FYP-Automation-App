@@ -69,7 +69,10 @@
       .Select(part => part.Split('=', 2))
       .ToDictionary(part => Uri.UnescapeDataString(part[0]), part => part.Length > 1 ? Uri.UnescapeDataString(part[1]) : "");
 
-    if (query.ContainsKey("error")) _error = "Invalid email or password.";
+    if (query.TryGetValue("error", out var error))
+    {
+      _error = error == "locked" ? "Account locked. Try again later." : "Invalid email or password.";
+    }
     if (query.TryGetValue("email", out var email)) _email = email;
   }
 }

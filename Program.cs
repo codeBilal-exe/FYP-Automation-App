@@ -89,7 +89,7 @@ builder.Services.AddAuthentication(options =>
     options.LoginPath = "/login";
     options.AccessDeniedPath = "/login";
     options.SlidingExpiration = true;
-    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
 });
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
@@ -127,7 +127,8 @@ app.MapPost("/auth/login", async (HttpContext httpContext, AuthService authServi
     var user = await authService.Login(email, password);
     if (user == null)
     {
-        return Results.Redirect($"/login?error=1&email={Uri.EscapeDataString(email)}", false);
+        var error = authService.LastLoginError == "Account locked. Try again later." ? "locked" : "invalid";
+        return Results.Redirect($"/login?error={error}&email={Uri.EscapeDataString(email)}", false);
     }
 
     var claims = new List<Claim>
@@ -141,9 +142,19 @@ app.MapPost("/auth/login", async (HttpContext httpContext, AuthService authServi
     var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
     var principal = new ClaimsPrincipal(identity);
     await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal,
-        new AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8) });
+        new AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30) });
 
-    return Results.Redirect("/dashboard", false);
+    var redirectPath = user.Role switch
+    {
+        FYP_AutomationSystem.Models.UserRole.HOD => "/hod/dashboard",
+        FYP_AutomationSystem.Models.UserRole.Student => "/student/dashboard",
+        FYP_AutomationSystem.Models.UserRole.Supervisor => "/supervisor/dashboard",
+        FYP_AutomationSystem.Models.UserRole.Coordinator => "/coordinator/dashboard",
+        FYP_AutomationSystem.Models.UserRole.Admin => "/admin/dashboard",
+        _ => "/dashboard"
+    };
+
+    return Results.Redirect(redirectPath, false);
 }).DisableAntiforgery();
 
 app.MapGet("/auth/logout", async (HttpContext httpContext) =>

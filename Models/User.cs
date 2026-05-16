@@ -10,5 +10,8 @@ namespace FYP_AutomationSystem.Models
         public string? Expertise { get; set; }
         public DateTime CreatedAt { get; set; }
         public bool IsActive { get; set; }
+        public int FailedLoginAttempts { get; set; } = 0;
+        public bool IsLockedOut { get; set; } = false;
+        public DateTime? LockoutUntil { get; set; }
     }
 }

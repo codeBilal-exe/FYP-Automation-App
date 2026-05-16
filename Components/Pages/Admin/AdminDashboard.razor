@@ -1,4 +1,6 @@
-@attribute [Authorize(Roles = "Admin,HOD,Coordinator")]
+@page "/admin/dashboard"
+@page "/coordinator/dashboard"
+@attribute [Authorize(Roles = "Admin,Coordinator")]
 @inject AppDbContext Db
 @inject ReportService ReportService
 @inject IJSRuntime JS

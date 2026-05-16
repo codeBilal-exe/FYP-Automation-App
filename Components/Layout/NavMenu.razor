@@ -10,13 +10,23 @@
     }
     else if (Role == "Supervisor")
     {
-        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/proposals"><i class="bi bi-clipboard-check"></i><span>Review Proposals</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/progress"><i class="bi bi-graph-up"></i><span>Track Progress</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/evaluate"><i class="bi bi-star"></i><span>Evaluate</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/groups"><i class="bi bi-diagram-3"></i><span>My Groups</span></NavLink>
     }
-    else if (Role == "Admin" || Role == "HOD" || Role == "Coordinator")
+    else if (Role == "HOD")
+    {
+        <AuthorizeView Roles="HOD">
+            <Authorized>
+                <NavLink class="nav-item-link" href="/hod/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+                <NavLink class="nav-item-link" href="/hod/proposals"><i class="bi bi-hourglass-split"></i><span>Pending Proposals</span></NavLink>
+                <NavLink class="nav-item-link" href="/hod/reports"><i class="bi bi-bar-chart"></i><span>Reports</span></NavLink>
+            </Authorized>
+        </AuthorizeView>
+    }
+    else if (Role == "Admin" || Role == "Coordinator")
     {
         <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/users"><i class="bi bi-person-gear"></i><span>Manage Users</span></NavLink>

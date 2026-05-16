@@ -6,7 +6,9 @@ namespace FYP_AutomationSystem.Models
         SubmittedToSupervisor,
         ApprovedBySupervisor,
         ApprovedByCoordinator,
+        PendingHOD,
         ApprovedByHOD,
+        ApprovedActive,
         Rejected
     }
 }

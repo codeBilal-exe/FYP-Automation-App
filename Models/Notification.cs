@@ -9,5 +9,6 @@ namespace FYP_AutomationSystem.Models
         public int RecipientId { get; set; }
         public bool IsRead { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime SentAt { get; set; }
     }
 }

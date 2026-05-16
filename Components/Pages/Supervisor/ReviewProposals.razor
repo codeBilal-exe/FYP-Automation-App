@@ -1,12 +1,17 @@
 @page "/supervisor/proposals"
 @page "/admin/proposals"
-@attribute [Authorize(Roles = "Supervisor,Coordinator,HOD,Admin")]
+@attribute [Authorize(Roles = "Supervisor,Coordinator,Admin")]
 @inject ProposalService ProposalService
 @inject AuditService AuditService
 @inject AppDbContext Db
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header"><div><h1>Review Proposals</h1><div class="page-subtitle">Approve or reject pending proposals.</div></div></div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
 
 <div class="fcard">
   @if (!_proposals.Any()) { <div class="empty-state"><i class="bi bi-clipboard"></i>No proposals to review.</div> }
@@ -57,17 +62,15 @@
   private Dictionary<int,string> _students = new();
   private Proposal? _rejecting;
   private string _reason = "";
-  private string _role = "";
+  private string? _error;
 
   protected override async Task OnInitializedAsync()
   {
     var u = AuthService.CurrentUser; if (u == null) return;
-    _role = u.Role.ToString();
     var pending = u.Role switch
     {
       UserRole.Supervisor   => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.SubmittedToSupervisor),
       UserRole.Coordinator  => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.ApprovedBySupervisor),
-      UserRole.HOD          => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.ApprovedByCoordinator),
       _                     => await ProposalService.GetAllProposalsAsync()
     };
     _proposals = pending;
@@ -77,17 +80,27 @@
 
   private async Task Approve(Proposal p)
   {
+    _error = null;
     var u = AuthService.CurrentUser; if (u == null) return;
-    var next = u.Role switch
+
+    try
     {
-      UserRole.Supervisor  => ProposalStatus.ApprovedBySupervisor,
-      UserRole.Coordinator => ProposalStatus.ApprovedByCoordinator,
-      UserRole.HOD         => ProposalStatus.ApprovedByHOD,
-      _                    => ProposalStatus.ApprovedByHOD
-    };
-    await ProposalService.UpdateProposalStatusAsync(p.Id, next);
-    await AuditService.LogActionAsync(u.Id, "ProposalApprove", $"Proposal#{p.Id} -> {next}");
-    await OnInitializedAsync();
+      if (u.Role == UserRole.Supervisor || u.Role == UserRole.Coordinator)
+      {
+        await ProposalService.ApproveBySupervisorOrCoordinator(p.Id, u.Id, u.Role);
+      }
+      else
+      {
+        await ProposalService.UpdateProposalStatusAsync(p.Id, ProposalStatus.ApprovedBySupervisor);
+      }
+
+      await AuditService.LogActionAsync(u.Id, "ProposalApprove", $"Proposal#{p.Id}");
+      await OnInitializedAsync();
+    }
+    catch (Exception ex)
+    {
+      _error = ex.Message;
+    }
   }
 
   private void StartReject(Proposal p) { _rejecting = p; _reason = ""; }

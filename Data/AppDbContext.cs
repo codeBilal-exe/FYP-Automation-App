@@ -23,6 +23,7 @@ namespace FYP_AutomationSystem.Data
         public DbSet<VivaSlot> VivaSlots { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<PlagiarismReport> PlagiarismReports { get; set; }
+        public DbSet<ReportArchive> ReportArchives { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -193,6 +194,18 @@ namespace FYP_AutomationSystem.Data
             // PlagiarismReport Configuration
             modelBuilder.Entity<PlagiarismReport>()
                 .HasKey(pr => pr.Id);
+
+            // ReportArchive Configuration
+            modelBuilder.Entity<ReportArchive>()
+                .HasKey(ra => ra.Id);
+            modelBuilder.Entity<ReportArchive>()
+                .Property(ra => ra.ReportType)
+                .IsRequired()
+                .HasMaxLength(64);
+            modelBuilder.Entity<ReportArchive>()
+                .Property(ra => ra.FilePath)
+                .IsRequired()
+                .HasMaxLength(500);
         }
     }
 }

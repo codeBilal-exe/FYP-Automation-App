@@ -1,0 +1,143 @@
+@page "/hod/proposals"
+@attribute [Authorize(Roles = "HOD")]
+@inject ProposalService ProposalService
+@inject AppDbContext Db
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>Pending HOD Proposals</h1><div class="page-subtitle">Final approval queue after coordinator sign-off.</div></div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+
+<div class="fcard">
+  @if (!_rows.Any())
+  {
+    <div class="empty-state"><i class="bi bi-clipboard"></i>No pending HOD proposals.</div>
+  }
+  else
+  {
+    <table class="ftable">
+      <thead>
+        <tr><th>Title</th><th>Group</th><th>Coordinator Approved</th><th>Status</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        @foreach (var row in _rows)
+        {
+          <tr>
+            <td>@row.Proposal.Title</td>
+            <td>@row.GroupName</td>
+            <td>@row.Proposal.CoordinatorApprovedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+            <td><span class="fbadge warning">@row.Proposal.Status</span></td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(row.Proposal.Id)">Approve</button>
+              <button class="btn btn-sm btn-outline-danger" @onclick="() => ToggleReject(row.Proposal.Id)">Reject</button>
+            </td>
+          </tr>
+          @if (_rejectingProposalId == row.Proposal.Id)
+          {
+            <tr>
+              <td colspan="5">
+                <div class="p-2 border rounded">
+                  <label class="form-label">Rejection reason (required, minimum 10 characters)</label>
+                  <textarea class="form-control" rows="3" @bind="_rejectionReason"></textarea>
+                  @if (!string.IsNullOrWhiteSpace(_validationError))
+                  {
+                    <div class="text-danger small mt-1">@_validationError</div>
+                  }
+                  <div class="mt-2 d-flex gap-2 justify-content-end">
+                    <button class="btn btn-light btn-sm" @onclick="CancelReject">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => Reject(row.Proposal.Id)">Confirm Reject</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  }
+</div>
+
+@code {
+  private List<RowVm> _rows = new();
+  private string? _error;
+  private int? _rejectingProposalId;
+  private string _rejectionReason = string.Empty;
+  private string? _validationError;
+
+  private sealed class RowVm
+  {
+    public Proposal Proposal { get; set; } = new();
+    public string GroupName { get; set; } = string.Empty;
+  }
+
+  protected override async Task OnInitializedAsync() => await Load();
+
+  private async Task Load()
+  {
+    var proposals = await ProposalService.GetPendingHODProposalsAsync();
+    var groupLookup = await Db.Groups.ToDictionaryAsync(g => g.Id, g => g.GroupName);
+    _rows = proposals.Select(p => new RowVm
+    {
+      Proposal = p,
+      GroupName = groupLookup.TryGetValue(p.GroupId, out var groupName) ? groupName : "Unknown Group"
+    }).ToList();
+  }
+
+  private async Task Approve(int proposalId)
+  {
+    _error = null;
+    try
+    {
+      var hodId = AuthService.CurrentUser?.Id ?? 0;
+      await ProposalService.ApproveByHOD(proposalId, hodId);
+      await Load();
+    }
+    catch (Exception ex)
+    {
+      _error = ex.Message;
+    }
+  }
+
+  private void ToggleReject(int proposalId)
+  {
+    _rejectingProposalId = proposalId;
+    _rejectionReason = string.Empty;
+    _validationError = null;
+  }
+
+  private void CancelReject()
+  {
+    _rejectingProposalId = null;
+    _rejectionReason = string.Empty;
+    _validationError = null;
+  }
+
+  private async Task Reject(int proposalId)
+  {
+    _error = null;
+    _validationError = null;
+
+    if (string.IsNullOrWhiteSpace(_rejectionReason) || _rejectionReason.Trim().Length < 10)
+    {
+      _validationError = "Rejection reason must be at least 10 characters.";
+      return;
+    }
+
+    try
+    {
+      var hodId = AuthService.CurrentUser?.Id ?? 0;
+      await ProposalService.RejectByHOD(proposalId, hodId, _rejectionReason.Trim());
+      CancelReject();
+      await Load();
+    }
+    catch (Exception ex)
+    {
+      _error = ex.Message;
+    }
+  }
+}

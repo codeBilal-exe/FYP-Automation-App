@@ -108,13 +108,16 @@
     ProposalStatus.SubmittedToSupervisor => 1,
     ProposalStatus.ApprovedBySupervisor => 2,
     ProposalStatus.ApprovedByCoordinator => 3,
-    ProposalStatus.ApprovedByHOD => 4,
+    ProposalStatus.PendingHOD => 4,
+    ProposalStatus.ApprovedByHOD => 5,
+    ProposalStatus.ApprovedActive => 6,
     _ => 0
   };
 
   private static string StatusClass(ProposalStatus s) => s switch
   {
     ProposalStatus.ApprovedByHOD => "completed",
+    ProposalStatus.ApprovedActive => "completed",
     ProposalStatus.Rejected => "danger",
     ProposalStatus.Draft => "pending",
     _ => "active"

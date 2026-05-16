@@ -37,6 +37,11 @@ namespace FYP_AutomationSystem.Data
                     GroupName = "Group Alpha",
                     SupervisorId = supervisor.Id,
                     CreatedAt = DateTime.UtcNow,
+                    Semester = "Spring-2026",
+                    Department = "CS",
+                    FinalGrade = 88,
+                    LetterGrade = "A",
+                    IsFinalGradeConfirmed = true,
                     Members = new List<User> { alice, bob }
                 };
                 db.Groups.Add(group);
@@ -67,7 +72,11 @@ namespace FYP_AutomationSystem.Data
                     Title = "Smart FYP Automation",
                     Abstract = "Automate proposal, milestone, evaluation, viva and reporting workflows.",
                     Objectives = "1. End-to-end FYP workflow\n2. Role-based dashboards\n3. Analytics",
-                    Status = ProposalStatus.ApprovedByHOD,
+                    Status = ProposalStatus.ApprovedActive,
+                    ApprovedByCoordinator = true,
+                    ApprovedByHOD = true,
+                    CoordinatorApprovedAt = DateTime.UtcNow.AddDays(-41),
+                    HODApprovedAt = DateTime.UtcNow.AddDays(-40),
                     StudentId = alice.Id,
                     GroupId = group.Id,
                     SubmittedAt = DateTime.UtcNow.AddDays(-40)
@@ -91,11 +100,15 @@ namespace FYP_AutomationSystem.Data
             {
                 db.Notifications.AddRange(
                     new Notification { Title = "Welcome",            Message = "Welcome to the FYP Automation System.",       Type = NotificationType.Info,     RecipientId = alice.Id,      IsRead = false, CreatedAt = DateTime.UtcNow.AddHours(-5) },
-                    new Notification { Title = "Proposal Approved",  Message = "Your proposal has been approved by the HOD.", Type = NotificationType.Success,  RecipientId = alice.Id,      IsRead = false, CreatedAt = DateTime.UtcNow.AddHours(-3) },
+                    new Notification { Title = "Proposal Approved",  Message = "Your proposal has been approved by the HOD.", Type = NotificationType.ProposalDecision,  RecipientId = alice.Id,      IsRead = false, CreatedAt = DateTime.UtcNow.AddHours(-3) },
                     new Notification { Title = "Upcoming Deadline",  Message = "Mid Implementation milestone due soon.",      Type = NotificationType.Deadline, RecipientId = bob.Id,        IsRead = false, CreatedAt = DateTime.UtcNow.AddHours(-2) },
                     new Notification { Title = "New Group Assigned", Message = "Group Alpha has been assigned to you.",       Type = NotificationType.Info,     RecipientId = supervisor.Id, IsRead = false, CreatedAt = DateTime.UtcNow.AddHours(-1) },
                     new Notification { Title = "System Update",      Message = "FYP system v1.0 is now live.",                Type = NotificationType.Info,     RecipientId = (await db.Users.FirstAsync(u => u.Role == UserRole.Admin)).Id, IsRead = false, CreatedAt = DateTime.UtcNow }
                 );
+                foreach (var n in db.Notifications.Local)
+                {
+                    n.SentAt = n.CreatedAt;
+                }
                 await db.SaveChangesAsync();
             }
         }
