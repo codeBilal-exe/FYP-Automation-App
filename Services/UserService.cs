@@ -8,11 +8,13 @@ namespace FYP_AutomationSystem.Services
     {
         private readonly AppDbContext _context;
         private readonly AuthService _authService;
+        private readonly SupabaseAuthSyncService _supabaseAuthSyncService;
 
-        public UserService(AppDbContext context, AuthService authService)
+        public UserService(AppDbContext context, AuthService authService, SupabaseAuthSyncService supabaseAuthSyncService)
         {
             _context = context;
             _authService = authService;
+            _supabaseAuthSyncService = supabaseAuthSyncService;
         }
 
         public sealed class CreateUserResult
@@ -76,6 +78,16 @@ namespace FYP_AutomationSystem.Services
                 {
                     if (!existingUser.IsActive)
                     {
+                        var reactivationSync = await _supabaseAuthSyncService.EnsureUserSynced(
+                            normalizedEmail,
+                            password,
+                            fullName.Trim(),
+                            role);
+                        if (!reactivationSync.Success)
+                        {
+                            return new CreateUserResult { Success = false, Message = reactivationSync.Message };
+                        }
+
                         existingUser.FullName = fullName.Trim();
                         existingUser.PasswordHash = _authService.HashPassword(password);
                         existingUser.Role = role;
@@ -101,6 +113,12 @@ namespace FYP_AutomationSystem.Services
                 var passwordHash = _authService.HashPassword(password);
                 if (string.IsNullOrWhiteSpace(passwordHash))
                     return new CreateUserResult { Success = false, Message = "Failed to hash password." };
+
+                var syncResult = await _supabaseAuthSyncService.EnsureUserSynced(normalizedEmail, password, fullName.Trim(), role);
+                if (!syncResult.Success)
+                {
+                    return new CreateUserResult { Success = false, Message = syncResult.Message };
+                }
 
                 var user = new User
                 {
@@ -260,6 +278,12 @@ namespace FYP_AutomationSystem.Services
                 if (evaluations.Count > 0)
                 {
                     _context.Evaluations.RemoveRange(evaluations);
+                }
+
+                var authDelete = await _supabaseAuthSyncService.DeleteAuthUserByEmail(user.Email);
+                if (!authDelete.Success)
+                {
+                    return new DeleteUserResult { Success = false, Message = authDelete.Message };
                 }
 
                 _context.Users.Remove(user);

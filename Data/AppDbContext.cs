@@ -32,6 +32,7 @@ namespace FYP_AutomationSystem.Data
         public DbSet<GroupMessageThread> GroupMessageThreads { get; set; }
         public DbSet<GroupMessage> GroupMessages { get; set; }
         public DbSet<PersonalMessage> PersonalMessages { get; set; }
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -227,6 +228,22 @@ namespace FYP_AutomationSystem.Data
                 .HasKey(m => m.Id);
             modelBuilder.Entity<PersonalMessage>()
                 .HasKey(m => m.Id);
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasKey(t => t.Id);
+            modelBuilder.Entity<PasswordResetToken>()
+                .Property(t => t.TokenHash)
+                .IsRequired()
+                .HasMaxLength(128);
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasIndex(t => t.TokenHash)
+                .IsUnique();
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasIndex(t => new { t.UserId, t.ExpiresAt });
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

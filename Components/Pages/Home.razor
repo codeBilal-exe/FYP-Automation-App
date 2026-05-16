@@ -28,6 +28,10 @@
     {
       <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
     }
+    @if (!string.IsNullOrEmpty(_info))
+    {
+      <div class="alert alert-success py-2 small"><i class="bi bi-check-circle me-1"></i>@_info</div>
+    }
 
     <form method="post" action="/auth/login" class="login-form">
       <div class="mb-3">
@@ -43,8 +47,11 @@
         <label class="form-label" for="password">Password</label>
         <div class="input-icon-wrap">
           <i class="bi bi-lock"></i>
-          <input id="password" name="password" type="password" class="form-control" placeholder="••••••••"
+          <input id="password" name="password" type="@(_showPassword ? "text" : "password")" class="form-control password-field" placeholder="••••••••"
                  autocomplete="current-password" required />
+          <button type="button" class="password-toggle-btn" @onclick="TogglePasswordVisibility" aria-label="Toggle password visibility">
+            <i class="bi @(_showPassword ? "bi-eye-slash" : "bi-eye")"></i>
+          </button>
         </div>
       </div>
 
@@ -53,7 +60,7 @@
           <input class="form-check-input" type="checkbox" id="remember" />
           <label class="form-check-label" for="remember">Remember me</label>
         </div>
-        <span>Need access? Contact admin.</span>
+        <a href="/forgot-password" class="text-decoration-none">Forgot password?</a>
       </div>
 
       <button class="btn btn-primary w-100 auth-submit" type="submit">
@@ -74,7 +81,9 @@
 
 @code {
   private string? _error;
+  private string? _info;
   private string _email = "";
+  private bool _showPassword;
 
   protected override async Task OnInitializedAsync()
   {
@@ -98,9 +107,36 @@
       _error = error == "locked" ? "Account locked. Try again later." : "Invalid email or password.";
     }
 
+    if (query.TryGetValue("reset", out var resetStatus) && resetStatus == "success")
+    {
+      _info = "Your password has been reset. Please sign in with your new password.";
+    }
+
     if (query.TryGetValue("email", out var email))
     {
       _email = email;
     }
   }
+
+  private void TogglePasswordVisibility()
+  {
+    _showPassword = !_showPassword;
+  }
 }
+
+<style>
+.password-field {
+  padding-right: 2.9rem !important;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: .5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  z-index: 2;
+}
+</style>

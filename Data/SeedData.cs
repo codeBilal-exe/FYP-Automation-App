@@ -261,6 +261,9 @@ namespace FYP_AutomationSystem.Data
                         "CREATE TABLE IF NOT EXISTS \"GroupMessageThreads\" (\"Id\" SERIAL PRIMARY KEY, \"GroupId\" integer NOT NULL, \"SupervisorId\" integer NOT NULL, \"CreatedAt\" timestamp with time zone NOT NULL);",
                         "CREATE TABLE IF NOT EXISTS \"GroupMessages\" (\"Id\" SERIAL PRIMARY KEY, \"ThreadId\" integer NOT NULL, \"SenderId\" integer NOT NULL, \"Content\" text NOT NULL, \"SentAt\" timestamp with time zone NOT NULL, \"IsRead\" boolean NOT NULL DEFAULT FALSE);",
                         "CREATE TABLE IF NOT EXISTS \"PersonalMessages\" (\"Id\" SERIAL PRIMARY KEY, \"SenderId\" integer NOT NULL, \"RecipientId\" integer NOT NULL, \"Content\" text NOT NULL, \"SentAt\" timestamp with time zone NOT NULL, \"IsRead\" boolean NOT NULL DEFAULT FALSE);",
+                        "CREATE TABLE IF NOT EXISTS \"PasswordResetTokens\" (\"Id\" SERIAL PRIMARY KEY, \"UserId\" integer NOT NULL, \"TokenHash\" character varying(128) NOT NULL, \"RequestedAt\" timestamp with time zone NOT NULL, \"ExpiresAt\" timestamp with time zone NOT NULL, \"UsedAt\" timestamp with time zone NULL);",
+                        "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PasswordResetTokens_TokenHash\" ON \"PasswordResetTokens\" (\"TokenHash\");",
+                        "CREATE INDEX IF NOT EXISTS \"IX_PasswordResetTokens_UserId_ExpiresAt\" ON \"PasswordResetTokens\" (\"UserId\", \"ExpiresAt\");",
                         "CREATE INDEX IF NOT EXISTS \"IX_Notifications_RecipientId_EventType_ReferenceId\" ON \"Notifications\" (\"RecipientId\", \"EventType\", \"ReferenceId\");"
                     };
 
@@ -304,6 +307,9 @@ namespace FYP_AutomationSystem.Data
                         "CREATE TABLE IF NOT EXISTS GroupMessageThreads (Id INTEGER PRIMARY KEY AUTOINCREMENT, GroupId INTEGER NOT NULL, SupervisorId INTEGER NOT NULL, CreatedAt TEXT NOT NULL);",
                         "CREATE TABLE IF NOT EXISTS GroupMessages (Id INTEGER PRIMARY KEY AUTOINCREMENT, ThreadId INTEGER NOT NULL, SenderId INTEGER NOT NULL, Content TEXT NOT NULL, SentAt TEXT NOT NULL, IsRead INTEGER NOT NULL DEFAULT 0);",
                         "CREATE TABLE IF NOT EXISTS PersonalMessages (Id INTEGER PRIMARY KEY AUTOINCREMENT, SenderId INTEGER NOT NULL, RecipientId INTEGER NOT NULL, Content TEXT NOT NULL, SentAt TEXT NOT NULL, IsRead INTEGER NOT NULL DEFAULT 0);",
+                        "CREATE TABLE IF NOT EXISTS PasswordResetTokens (Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, TokenHash TEXT NOT NULL, RequestedAt TEXT NOT NULL, ExpiresAt TEXT NOT NULL, UsedAt TEXT NULL);",
+                        "CREATE UNIQUE INDEX IF NOT EXISTS IX_PasswordResetTokens_TokenHash ON PasswordResetTokens (TokenHash);",
+                        "CREATE INDEX IF NOT EXISTS IX_PasswordResetTokens_UserId_ExpiresAt ON PasswordResetTokens (UserId, ExpiresAt);",
                         "CREATE INDEX IF NOT EXISTS IX_Notifications_RecipientId_EventType_ReferenceId ON Notifications (RecipientId, EventType, ReferenceId);"
                     };
 

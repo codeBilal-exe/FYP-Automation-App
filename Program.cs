@@ -77,6 +77,8 @@ builder.Services.AddScoped<ProjectThreadService>();
 builder.Services.AddScoped<VivaService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<AuditService>();
+builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddScoped<SupabaseAuthSyncService>();
 
 // Custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
@@ -104,6 +106,16 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
     var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
     await SeedData.InitializeAsync(db, auth);
+    var authSync = scope.ServiceProvider.GetRequiredService<SupabaseAuthSyncService>();
+    var syncResult = await authSync.SyncExistingUsersFromApp();
+    Console.WriteLine($"Supabase auth sync: created={syncResult.Created}, existing={syncResult.Existing}, failed={syncResult.Failed}");
+    if (syncResult.Errors.Count > 0)
+    {
+        foreach (var err in syncResult.Errors)
+        {
+            Console.WriteLine($"Supabase auth sync error: {err}");
+        }
+    }
 }
 
 if (!app.Environment.IsDevelopment())
@@ -164,6 +176,66 @@ app.MapGet("/auth/logout", async (HttpContext httpContext) =>
     AuthService.CurrentUser = null;
     return Results.Redirect("/", false);
 });
+
+app.MapPost("/auth/forgot-password", async (HttpContext httpContext, PasswordResetService passwordResetService) =>
+{
+    var form = await httpContext.Request.ReadFormAsync();
+    var projectEmail = form["projectEmail"].ToString().Trim();
+
+    var appBaseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
+    var result = await passwordResetService.RequestPasswordReset(projectEmail, appBaseUrl);
+
+    if (result.Success)
+    {
+        return Results.Redirect("/forgot-password?status=sent", false);
+    }
+
+    var status = Uri.EscapeDataString(result.Status);
+    return Results.Redirect($"/forgot-password?status={status}", false);
+}).DisableAntiforgery();
+
+app.MapPost("/auth/reset-password", async (HttpContext httpContext, PasswordResetService passwordResetService) =>
+{
+    var form = await httpContext.Request.ReadFormAsync();
+    var token = form["token"].ToString().Trim();
+    var password = form["password"].ToString();
+    var confirmPassword = form["confirmPassword"].ToString();
+
+    if (password != confirmPassword)
+    {
+        return Results.Redirect($"/reset-password?token={Uri.EscapeDataString(token)}&status=nomatch", false);
+    }
+
+    var result = await passwordResetService.ResetPassword(token, password);
+    if (!result.Success)
+    {
+        return Results.Redirect($"/reset-password?token={Uri.EscapeDataString(token)}&status=invalid", false);
+    }
+
+    return Results.Redirect("/?reset=success", false);
+}).DisableAntiforgery();
+
+app.MapPost("/auth/reset-password-supabase", async (HttpContext httpContext, PasswordResetService passwordResetService) =>
+{
+    var form = await httpContext.Request.ReadFormAsync();
+    var accessToken = form["accessToken"].ToString().Trim();
+    var password = form["password"].ToString();
+    var confirmPassword = form["confirmPassword"].ToString();
+
+    if (password != confirmPassword)
+    {
+        return Results.Redirect("/reset-password-supabase?status=nomatch", false);
+    }
+
+    var result = await passwordResetService.ResetSupabasePassword(accessToken, password);
+    if (!result.Success)
+    {
+        var status = Uri.EscapeDataString(result.Status);
+        return Results.Redirect($"/reset-password-supabase?status={status}", false);
+    }
+
+    return Results.Redirect("/?reset=success", false);
+}).DisableAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
