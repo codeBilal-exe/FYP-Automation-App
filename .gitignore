@@ -1,0 +1,38 @@
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.lscache
+
+# Visual Studio / Rider
+.vs/
+*.ide/
+.idea/
+
+# NuGet
+*.nupkg
+# The packages folder can be ignored because of PackageRestore
+**/[Pp]ackages/*
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Keep local app settings out of source control
+appsettings.*.json
+
+# macOS
+.DS_Store
+
+# Log files
+*.log
+
+# Rider
+.idea/
+
+# Others
+*.db
