@@ -85,7 +85,7 @@ On first launch, the app automatically creates the database schema and seeds sam
 
 ## Running in Development
 
-Use the same command:
+Use the same command
 
 ```bash
 dotnet run
