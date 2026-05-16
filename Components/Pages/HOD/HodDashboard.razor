@@ -7,7 +7,7 @@
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
-  <div><h1>HOD Dashboard</h1><div class="page-subtitle">Final proposal approvals and reporting overview.</div></div>
+  <div><h1>HOD Dashboard</h1><div class="page-subtitle">Review supervisor-approved proposals and route them to coordinator.</div></div>
   <button class="btn btn-soft" @onclick="Load" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
@@ -38,7 +38,7 @@ else
             <div class="py-2 border-bottom d-flex justify-content-between align-items-center">
               <div>
                 <div class="fw-semibold">@item.Title</div>
-                <div class="small text-muted">Group: @item.GroupName | Coordinator Approved: @item.CoordinatorApprovedAt?.ToString("yyyy-MM-dd HH:mm")</div>
+                <div class="small text-muted">Group: @item.GroupName | Submitted: @item.SubmittedAt?.ToString("yyyy-MM-dd HH:mm")</div>
               </div>
               <a class="btn btn-sm btn-primary" href="/hod/proposals">Review</a>
             </div>
@@ -86,7 +86,7 @@ else
   {
     public string Title { get; set; } = string.Empty;
     public string GroupName { get; set; } = string.Empty;
-    public DateTime? CoordinatorApprovedAt { get; set; }
+    public DateTime? SubmittedAt { get; set; }
   }
 
   protected override async Task OnInitializedAsync()
@@ -117,7 +117,7 @@ else
     {
       Title = p.Title,
       GroupName = groupLookup.TryGetValue(p.GroupId, out var g) ? g : "Unknown Group",
-      CoordinatorApprovedAt = p.CoordinatorApprovedAt
+      SubmittedAt = p.SubmittedAt
     }).ToList();
 
     _pendingCount = _pending.Count;

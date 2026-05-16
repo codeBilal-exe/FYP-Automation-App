@@ -73,6 +73,7 @@ builder.Services.AddScoped<EvaluationService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<MessageService>();
+builder.Services.AddScoped<ProjectThreadService>();
 builder.Services.AddScoped<VivaService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<AuditService>();

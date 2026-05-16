@@ -1,0 +1,36 @@
+@page "/student/project-thread"
+@attribute [Authorize(Roles = "Student")]
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@using Microsoft.EntityFrameworkCore
+
+<div class="fcard">
+  <LoadingSpinner Message="Opening your project thread..." />
+</div>
+
+@code {
+  protected override async Task OnInitializedAsync()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(id, out var userId))
+    {
+      Nav.NavigateTo("/student/dashboard");
+      return;
+    }
+
+    var groupId = await Db.Groups
+      .Where(g => g.Members.Any(m => m.Id == userId))
+      .Select(g => g.Id)
+      .FirstOrDefaultAsync();
+
+    if (groupId <= 0)
+    {
+      Nav.NavigateTo("/student/dashboard");
+      return;
+    }
+
+    Nav.NavigateTo($"/project/thread/{groupId}");
+  }
+}

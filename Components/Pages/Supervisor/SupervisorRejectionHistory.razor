@@ -1,0 +1,114 @@
+@page "/supervisor/rejections"
+@attribute [Authorize(Roles = "Supervisor")]
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>Rejection History</h1><div class="page-subtitle">Track proposal rejection and resubmission improvement history.</div></div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+
+<div class="fcard">
+  @if (!_rows.Any())
+  {
+    <div class="empty-state"><i class="bi bi-clock-history"></i>No rejection history found.</div>
+  }
+  else
+  {
+    <table class="ftable">
+      <thead><tr><th>Group</th><th>Project</th><th>Date</th><th>Reason</th><th>Resubmitted</th><th>Improvement</th></tr></thead>
+      <tbody>
+        @foreach (var row in _rows)
+        {
+          <tr>
+            <td>@row.GroupName</td>
+            <td>@row.ProjectTitle</td>
+            <td>@row.Record.RejectedAt.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@row.Record.RejectionReason</td>
+            <td>@(row.Record.ResubmissionId.HasValue ? "Yes" : "Pending")</td>
+            <td>
+              <select class="form-select form-select-sm" value="@ImprovementValue(row.Record.ResubmissionImproved)" @onchange="e => SaveImprovement(row.Record, e.Value?.ToString())">
+                <option value="pending">Pending Review</option>
+                <option value="improved">Improved</option>
+                <option value="not_improved">Not Improved</option>
+              </select>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>
+
+@code {
+  private List<RowVm> _rows = new();
+  private string? _error;
+
+  private sealed class RowVm
+  {
+    public RejectionHistory Record { get; set; } = new();
+    public string GroupName { get; set; } = string.Empty;
+    public string ProjectTitle { get; set; } = string.Empty;
+  }
+
+  protected override async Task OnInitializedAsync()
+  {
+    await Load();
+  }
+
+  private async Task Load()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(id, out var userId))
+    {
+      _error = "Unable to identify current supervisor.";
+      return;
+    }
+
+    var records = await Db.RejectionHistories
+      .Where(r => r.RejectedByUserId == userId && r.RejectedByRole == UserRole.Supervisor.ToString())
+      .OrderByDescending(r => r.RejectedAt)
+      .ToListAsync();
+
+    var groupLookup = await Db.Groups.ToDictionaryAsync(g => g.Id, g => g.GroupName);
+    var proposalLookup = await Db.Proposals.ToDictionaryAsync(p => p.Id, p => p.Title);
+
+    _rows = records.Select(r => new RowVm
+    {
+      Record = r,
+      GroupName = groupLookup.TryGetValue(r.GroupId, out var groupName) ? groupName : "Unknown",
+      ProjectTitle = proposalLookup.TryGetValue(r.ProposalId, out var title) ? title : "Unknown"
+    }).ToList();
+  }
+
+  private async Task SaveImprovement(RejectionHistory record, string? value)
+  {
+    var reloaded = await Db.RejectionHistories.FirstOrDefaultAsync(r => r.Id == record.Id);
+    if (reloaded == null)
+      return;
+
+    reloaded.ResubmissionImproved = value switch
+    {
+      "improved" => true,
+      "not_improved" => false,
+      _ => null
+    };
+
+    Db.RejectionHistories.Update(reloaded);
+    await Db.SaveChangesAsync();
+    await Load();
+  }
+
+  private static string ImprovementValue(bool? value) => value switch
+  {
+    true => "improved",
+    false => "not_improved",
+    _ => "pending"
+  };
+}

@@ -2,41 +2,182 @@
 @attribute [Authorize]
 @inject MessageService MessageService
 @inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
-<div class="page-header"><div><h1>Messages</h1><div class="page-subtitle">Direct messages with your team.</div></div></div>
+<div class="page-header">
+  <div><h1>Messages</h1><div class="page-subtitle">Role-based messaging with restricted contacts.</div></div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
 
 <div class="row g-3">
   <div class="col-md-4">
     <div class="fcard">
       <div class="fcard-title"><i class="bi bi-people"></i> Contacts</div>
-      @foreach (var c in _contacts)
+
+      @if (_isAdminOrCoordinator)
       {
-        <button class="btn w-100 text-start mb-1 @(c.Id == _other?.Id ? "btn-soft" : "btn-light")" @onclick="() => Select(c)">
-          <div class="fw-semibold">@c.FullName</div><div class="small text-muted">@c.Role</div>
-        </button>
+        <div class="d-flex flex-wrap gap-1 mb-2">
+          @foreach (var filter in _roleFilters)
+          {
+            <button class="btn btn-sm @(string.Equals(_activeFilter, filter, StringComparison.OrdinalIgnoreCase) ? "btn-primary" : "btn-light")" @onclick="() => SetFilter(filter)">@filter</button>
+          }
+        </div>
+
+        <div class="border rounded p-2 mb-2">
+          <div class="small text-uppercase text-muted mb-1">Broadcast</div>
+          <div class="d-flex gap-1 mb-1">
+            <select class="form-select form-select-sm" @bind="_broadcastRole">
+              <option value="Student">Students</option>
+              <option value="Supervisor">Supervisors</option>
+              <option value="Coordinator">Coordinators</option>
+              <option value="HOD">HOD</option>
+              <option value="Admin">Admins</option>
+            </select>
+            <button class="btn btn-sm btn-primary" @onclick="SendBroadcast">Send</button>
+          </div>
+          <textarea class="form-control form-control-sm" rows="2" @bind="_broadcastText" placeholder="Broadcast message"></textarea>
+        </div>
+      }
+
+      <div class="mb-2"><input class="form-control" placeholder="Search contacts" @bind="_search" @bind:event="oninput" /></div>
+
+      @if (_isStudent)
+      {
+        <div class="small text-uppercase text-muted mb-1">My Group</div>
+        @foreach (var c in FilteredContacts.Where(c => c.Role == UserRole.Student))
+        {
+          <button class="btn w-100 text-start mb-1 @(IsSelectedUser(c.Id) ? "btn-soft" : "btn-light")" @onclick="() => SelectUser(c)">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="fw-semibold">@c.FullName</div>
+              @if (_contactUnreadCounts.GetValueOrDefault(c.Id) > 0)
+              {
+                <span class="contact-dot">@_contactUnreadCounts[c.Id]</span>
+              }
+            </div>
+            <div class="small text-muted">@c.Email</div>
+          </button>
+        }
+
+        <div class="small text-uppercase text-muted mt-2 mb-1">My Supervisor</div>
+        @if (FilteredContacts.Any(c => c.Role == UserRole.Supervisor))
+        {
+          @foreach (var s in FilteredContacts.Where(c => c.Role == UserRole.Supervisor))
+          {
+            <button class="btn w-100 text-start mb-1 @(IsSelectedUser(s.Id) ? "btn-soft" : "btn-light")" @onclick="() => SelectUser(s)">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="fw-semibold">@s.FullName</div>
+                @if (_contactUnreadCounts.GetValueOrDefault(s.Id) > 0)
+                {
+                  <span class="contact-dot">@_contactUnreadCounts[s.Id]</span>
+                }
+              </div>
+              <div class="small text-muted">Supervisor</div>
+            </button>
+          }
+        }
+        else
+        {
+          <div class="small text-muted">No supervisor assigned yet</div>
+        }
+      }
+      else if (_isSupervisor)
+      {
+        <div class="small text-uppercase text-muted mb-1">My Groups</div>
+        @foreach (var g in _myGroups.Where(g => g.GroupName.Contains(_search, StringComparison.OrdinalIgnoreCase)))
+        {
+          <button class="btn w-100 text-start mb-1 @(IsSelectedGroup(g.Id) ? "btn-soft" : "btn-light")" @onclick="() => SelectGroup(g)">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="fw-semibold">@g.GroupName</div>
+              @if (_groupUnreadCounts.GetValueOrDefault(g.Id) > 0)
+              {
+                <span class="contact-dot">@_groupUnreadCounts[g.Id]</span>
+              }
+            </div>
+            <div class="small text-muted">Group Thread</div>
+          </button>
+
+          @if (_selectedGroup?.Id == g.Id)
+          {
+            <div class="ms-2 mb-2">
+              @foreach (var member in g.Members)
+              {
+                <button class="btn btn-sm btn-light me-1 mb-1 @(IsSelectedUser(member.Id) ? "btn-soft" : "")" @onclick="() => SelectUser(member)">@member.FullName</button>
+              }
+            </div>
+          }
+        }
+      }
+      else
+      {
+        @foreach (var c in FilteredContacts)
+        {
+          <button class="btn w-100 text-start mb-1 @(IsSelectedUser(c.Id) ? "btn-soft" : "btn-light")" @onclick="() => SelectUser(c)">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="fw-semibold">@c.FullName</div>
+              @if (_contactUnreadCounts.GetValueOrDefault(c.Id) > 0)
+              {
+                <span class="contact-dot">@_contactUnreadCounts[c.Id]</span>
+              }
+            </div>
+            <div class="small text-muted">@c.Role</div>
+          </button>
+        }
       }
     </div>
   </div>
+
   <div class="col-md-8">
     <div class="fcard" style="min-height:420px;display:flex;flex-direction:column">
-      @if (_other == null) { <div class="empty-state flex-grow-1"><i class="bi bi-chat-dots"></i>Select a contact.</div> }
+      @if (_selectedUser == null && _selectedGroup == null)
+      {
+        <div class="empty-state flex-grow-1"><i class="bi bi-chat-dots"></i>Select a contact or group thread.</div>
+      }
       else
       {
-        <div class="fcard-title"><i class="bi bi-chat"></i> @_other.FullName</div>
+        <div class="fcard-title">
+          <i class="bi bi-chat"></i>
+          @if (_selectedGroup != null)
+          {
+            <span>Group Thread: @_selectedGroup.GroupName</span>
+          }
+          else if (_selectedUser != null)
+          {
+            <span>@_selectedUser.FullName</span>
+          }
+        </div>
+
         <div class="flex-grow-1" style="overflow-y:auto;max-height:380px">
           @foreach (var m in _conv)
           {
-            var mine = m.SenderId == AuthService.CurrentUser!.Id;
+            var mine = m.SenderId == _currentUser?.Id;
             <div class="d-flex mb-2 @(mine ? "justify-content-end" : "justify-content-start")">
-              <div style="max-width:75%;padding:.5rem .8rem;border-radius:12px;background:@(mine ? "var(--primary)" : "#f1f5f9");color:@(mine ? "#fff" : "var(--text)")">
-                @m.Content<div class="small mt-1" style="opacity:.7">@m.SentAt.ToString("HH:mm")</div>
+              <div class="message-stack">
+                <div class="message-bubble @(mine ? "message-mine" : "message-other")">
+                  @if (!mine)
+                  {
+                    <div class="small fw-semibold">@m.Sender?.FullName</div>
+                  }
+                  <div>@m.Content</div>
+                </div>
+                <div class="message-status @(mine ? "status-mine" : "status-other")">
+                  <span class="message-meta">@m.SentAt.ToString("HH:mm")</span>
+                  @if (mine && _selectedUser != null)
+                  {
+                    <span class="message-tick-row"><i class="bi @TickIcon(m) @TickClass(m)"></i></span>
+                  }
+                </div>
               </div>
             </div>
           }
         </div>
+
         <div class="d-flex gap-2 mt-2">
-          <input class="form-control" @bind="_text" @bind:event="oninput" placeholder="Type a message…" @onkeydown="Key" />
+          <input class="form-control" @bind="_text" @bind:event="oninput" placeholder="Type a message..." @onkeydown="Key" />
           <button class="btn btn-primary" @onclick="Send"><i class="bi bi-send"></i></button>
         </div>
       }
@@ -45,28 +186,302 @@
 </div>
 
 @code {
+  private readonly string[] _roleFilters = ["All", "Student", "Supervisor", "Coordinator", "HOD", "Admin"];
+
+  private User? _currentUser;
   private List<User> _contacts = new();
-  private User? _other;
+  private List<Group> _myGroups = new();
+  private User? _selectedUser;
+  private Group? _selectedGroup;
   private List<Message> _conv = new();
-  private string _text = "";
+  private string _text = string.Empty;
+  private string _search = string.Empty;
+  private string _activeFilter = "All";
+  private string _broadcastRole = "Student";
+  private string _broadcastText = string.Empty;
+  private string? _error;
+  private CancellationTokenSource _pollCts = new();
+  private Dictionary<int, int> _contactUnreadCounts = new();
+  private Dictionary<int, int> _groupUnreadCounts = new();
+
+  private bool _isStudent => _currentUser?.Role == UserRole.Student;
+  private bool _isSupervisor => _currentUser?.Role == UserRole.Supervisor;
+  private bool _isAdminOrCoordinator => _currentUser?.Role == UserRole.Admin || _currentUser?.Role == UserRole.Coordinator;
+
+  private IEnumerable<User> FilteredContacts => _contacts.Where(c =>
+    string.IsNullOrWhiteSpace(_search) ||
+    c.FullName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+    c.Email.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    _contacts = await Db.Users.Where(x => x.Id != u.Id && x.IsActive).ToListAsync();
+    await LoadContacts();
+    _ = PollMessages(_pollCts.Token);
   }
-  private async Task Select(User c) { _other = c; await Load(); }
-  private async Task Load()
+
+  private async Task LoadContacts()
   {
-    var u = AuthService.CurrentUser!;
-    if (_other == null) return;
-    _conv = await MessageService.GetConversation(u.Id, _other.Id);
+    _error = null;
+
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(id, out var userId))
+    {
+      _error = "Unable to load current user.";
+      return;
+    }
+
+    _currentUser = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+    if (_currentUser == null)
+    {
+      _error = "Current user not found.";
+      return;
+    }
+
+    _contacts = await MessageService.GetContactsForUser(userId, _currentUser.Role, _activeFilter);
+    _contactUnreadCounts = await MessageService.GetUnreadCountsBySender(userId);
+    _groupUnreadCounts = await MessageService.GetUnreadCountsByGroup(userId);
+
+    if (_isSupervisor)
+    {
+      _myGroups = await MessageService.GetSupervisorMessagingGroups(userId);
+    }
+    else
+    {
+      _myGroups.Clear();
+    }
   }
+
+  private async Task SetFilter(string filter)
+  {
+    _activeFilter = filter;
+    await LoadContacts();
+  }
+
+  private bool IsSelectedUser(int id) => _selectedUser?.Id == id && _selectedGroup == null;
+  private bool IsSelectedGroup(int id) => _selectedGroup?.Id == id;
+
+  private async Task SelectUser(User contact)
+  {
+    _selectedGroup = null;
+    _selectedUser = contact;
+    _error = null;
+    await LoadConversation();
+  }
+
+  private async Task SelectGroup(Group group)
+  {
+    _selectedUser = null;
+    _selectedGroup = group;
+    _error = null;
+    await LoadConversation();
+  }
+
+  private async Task LoadConversation()
+  {
+    if (_currentUser == null)
+      return;
+
+    if (_selectedGroup != null)
+    {
+      _conv = await MessageService.GetGroupMessages(_selectedGroup.Id);
+      return;
+    }
+
+    if (_selectedUser != null)
+    {
+      _conv = await MessageService.GetConversation(_currentUser.Id, _selectedUser.Id);
+      await MessageService.MarkConversationAsRead(_currentUser.Id, _selectedUser.Id);
+      _conv = await MessageService.GetConversation(_currentUser.Id, _selectedUser.Id);
+      _contactUnreadCounts = await MessageService.GetUnreadCountsBySender(_currentUser.Id);
+    }
+  }
+
   private async Task Send()
   {
-    if (_other == null || string.IsNullOrWhiteSpace(_text)) return;
-    await MessageService.SendMessage(AuthService.CurrentUser!.Id, _other.Id, _text);
-    _text = "";
-    await Load();
+    if (_currentUser == null || string.IsNullOrWhiteSpace(_text))
+      return;
+
+    _error = null;
+
+    if (_selectedGroup != null)
+    {
+      var sent = await MessageService.SendGroupMessage(_currentUser.Id, _selectedGroup.Id, _text);
+      if (sent == null)
+      {
+        _error = "Unable to send group message.";
+        return;
+      }
+    }
+    else if (_selectedUser != null)
+    {
+      var sent = await MessageService.SendMessage(_currentUser.Id, _selectedUser.Id, _text);
+      if (sent == null)
+      {
+        _error = "Unable to send message to this contact (access rule).";
+        return;
+      }
+    }
+
+    _text = string.Empty;
+    await LoadConversation();
+    await LoadContacts();
   }
-  private async Task Key(KeyboardEventArgs e) { if (e.Key == "Enter") await Send(); }
+
+  private async Task Key(KeyboardEventArgs e)
+  {
+    if (e.Key == "Enter")
+      await Send();
+  }
+
+  private async Task SendBroadcast()
+  {
+    if (!_isAdminOrCoordinator || _currentUser == null)
+      return;
+
+    if (!Enum.TryParse<UserRole>(_broadcastRole, true, out var role))
+    {
+      _error = "Invalid broadcast role.";
+      return;
+    }
+
+    var sent = await MessageService.SendBroadcastMessage(_currentUser.Id, role, _broadcastText);
+    if (sent == 0)
+    {
+      _error = "No messages were sent.";
+      return;
+    }
+
+    _broadcastText = string.Empty;
+    _error = null;
+  }
+
+  private static string TickIcon(Message m)
+  {
+    if (m.ReadAt.HasValue)
+    {
+      return "bi-check2-all";
+    }
+
+    if (m.DeliveredAt.HasValue)
+    {
+      return "bi-check2-all";
+    }
+
+    return "bi-check2";
+  }
+
+  private static string TickClass(Message m)
+  {
+    if (m.ReadAt.HasValue)
+    {
+      return "tick-read";
+    }
+
+    if (m.DeliveredAt.HasValue)
+    {
+      return "tick-delivered";
+    }
+
+    return "tick-sent";
+  }
+
+  private async Task PollMessages(CancellationToken token)
+  {
+    using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+    try
+    {
+      while (await timer.WaitForNextTickAsync(token))
+      {
+        await InvokeAsync(async () =>
+        {
+          if (_currentUser == null)
+          {
+            await LoadContacts();
+            return;
+          }
+
+          if (_selectedUser != null || _selectedGroup != null)
+          {
+            await LoadConversation();
+          }
+        });
+      }
+    }
+    catch (OperationCanceledException)
+    {
+    }
+  }
+
+  public void Dispose()
+  {
+    _pollCts.Cancel();
+    _pollCts.Dispose();
+  }
 }
+
+<style>
+.tick-sent {
+  color: #64748b;
+  font-size: 1rem;
+}
+.tick-delivered {
+  color: #334155;
+  font-size: 1rem;
+}
+.tick-read {
+  color: #1d4ed8;
+  font-size: 1rem;
+}
+.message-stack {
+  display: flex;
+  flex-direction: column;
+}
+.message-bubble {
+  max-width: 75%;
+  padding: .5rem .8rem;
+  border-radius: 12px;
+}
+.message-mine {
+  background: var(--primary);
+  color: #fff;
+}
+.message-other {
+  background: #f1f5f9;
+  color: var(--text);
+}
+.message-meta {
+  font-size: .8rem;
+  color: #475569;
+}
+.message-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: .8rem;
+}
+.status-mine {
+  justify-content: flex-end;
+}
+.status-other {
+  justify-content: flex-start;
+}
+.message-tick-row {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.contact-dot {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: .7rem;
+  line-height: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+</style>

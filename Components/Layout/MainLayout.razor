@@ -1,7 +1,9 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
 @inject NotificationService NotificationService
+@inject MessageService MessageService
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IJSRuntime JS
 
 <div class="app-shell">
     <AuthorizeView>
@@ -11,7 +13,7 @@
                     <i class="bi bi-mortarboard-fill"></i>
                     <span class="brand-text">FYP System</span>
                 </div>
-                <NavMenu Role="@_role" />
+                <NavMenu Role="@_role" UnreadMessages="@_unreadMessages" />
                 <div class="sidebar-footer">
                     <button class="btn btn-sm btn-collapse" @onclick="ToggleSidebar" title="Collapse">
                         <i class="bi @(_collapsed ? "bi-chevron-double-right" : "bi-chevron-double-left")"></i>
@@ -38,9 +40,9 @@
                                 <div class="user-role"><span class="role-badge">@_role</span></div>
                             </div>
                         </div>
-                        <a class="btn btn-link ms-2 logout-btn" href="/auth/logout" title="Logout">
+                        <button type="button" class="btn btn-link ms-2 logout-btn" title="Logout" @onclick="ConfirmLogout">
                             <i class="bi bi-box-arrow-right fs-5"></i>
-                        </a>
+                        </button>
                     </div>
                 </header>
 
@@ -67,7 +69,10 @@
     private bool _collapsed;
     private string _role = "";
     private int _unread;
+    private int _unreadMessages;
     private string _pageTitle = "Dashboard";
+    private CancellationTokenSource _pollCts = new();
+    private int _currentUserId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -78,11 +83,32 @@
             var idValue = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (int.TryParse(idValue, out var userId))
             {
+                _currentUserId = userId;
                 _unread = await NotificationService.CountUnread(userId);
+                _unreadMessages = await MessageService.GetSidebarUnreadCount(userId);
+                _ = PollUnread(_pollCts.Token);
             }
         }
         Nav.LocationChanged += OnLocationChanged;
         UpdateTitle(Nav.Uri);
+    }
+
+    private async Task PollUnread(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                if (_currentUserId <= 0) continue;
+                _unread = await NotificationService.CountUnread(_currentUserId);
+                _unreadMessages = await MessageService.GetSidebarUnreadCount(_currentUserId);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -100,6 +126,13 @@
 
     private void ToggleSidebar() => _collapsed = !_collapsed;
 
+    private async Task ConfirmLogout()
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to logout?");
+        if (!confirmed) return;
+        Nav.NavigateTo("/auth/logout", forceLoad: true);
+    }
+
     private static string GetInitials(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "?";
@@ -107,5 +140,10 @@
         return parts.Length == 1 ? parts[0].Substring(0, 1).ToUpper() : (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper();
     }
 
-    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+    public void Dispose()
+    {
+        _pollCts.Cancel();
+        _pollCts.Dispose();
+        Nav.LocationChanged -= OnLocationChanged;
+    }
 }

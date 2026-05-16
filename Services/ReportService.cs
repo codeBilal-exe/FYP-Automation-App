@@ -153,8 +153,8 @@ namespace FYP_AutomationSystem.Services
                     ["Semester"] = semester,
                     ["TotalGroups"] = groups.Count.ToString(),
                     ["ConfirmedFinalGrades"] = groups.Count(g => g.IsFinalGradeConfirmed).ToString(),
-                    ["PendingHODProposals"] = proposals.Count(p => p.Status == ProposalStatus.PendingHOD).ToString(),
-                    ["ActiveApprovedProjects"] = proposals.Count(p => p.Status == ProposalStatus.ApprovedActive).ToString()
+                    ["PendingHODProposals"] = proposals.Count(p => p.Status == ProposalStatus.SupervisorApproved).ToString(),
+                    ["ActiveApprovedProjects"] = proposals.Count(p => p.Status == ProposalStatus.CoordinatorApproved).ToString()
                 }
             };
         }
@@ -335,7 +335,7 @@ namespace FYP_AutomationSystem.Services
         {
             var stats = new Dictionary<string, object>();
             var totalProposals = await _context.Proposals.CountAsync();
-            var approvedProposals = await _context.Proposals.CountAsync(p => p.Status == ProposalStatus.ApprovedActive);
+            var approvedProposals = await _context.Proposals.CountAsync(p => p.Status == ProposalStatus.CoordinatorApproved);
             var rejectedProposals = await _context.Proposals.CountAsync(p => p.Status == ProposalStatus.Rejected);
 
             stats["TotalProposals"] = totalProposals;

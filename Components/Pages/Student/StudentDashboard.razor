@@ -5,6 +5,7 @@
 @inject MilestoneService MilestoneService
 @inject NotificationService NotificationService
 @inject DocumentService DocumentService
+@inject ProposalService ProposalService
 
 <div class="page-header">
   <div>
@@ -77,10 +78,13 @@ else
   private List<Notification> _notifications = new();
   private Project? _project;
   private int _pending, _docCount, _grade, _overall;
+  private string? _proposalStatus;
+  private CancellationTokenSource _pollCts = new();
 
   protected override async Task OnInitializedAsync()
   {
     await LoadDashboard();
+    _ = PollDashboard(_pollCts.Token);
   }
 
   private async Task LoadDashboard()
@@ -130,6 +134,17 @@ else
     }
 
     _notifications = await NotificationService.GetNotificationsByUser(userId);
+
+    if (group != null)
+    {
+      var proposal = await ProposalService.GetLatestProposalByGroupAsync(group.Id, includeDraft: true);
+      _proposalStatus = proposal?.Status.ToString();
+    }
+    else
+    {
+      _proposalStatus = null;
+    }
+
     _loading = false;
   }
 
@@ -140,4 +155,26 @@ else
     MilestoneStatus.Overdue => "overdue",
     _ => "pending"
   };
+
+  private async Task PollDashboard(CancellationToken token)
+  {
+    using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
+    try
+    {
+      while (await timer.WaitForNextTickAsync(token))
+      {
+        await InvokeAsync(LoadDashboard);
+        await InvokeAsync(StateHasChanged);
+      }
+    }
+    catch (OperationCanceledException)
+    {
+    }
+  }
+
+  public void Dispose()
+  {
+    _pollCts.Cancel();
+    _pollCts.Dispose();
+  }
 }

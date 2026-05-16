@@ -1,0 +1,62 @@
+@page "/hod/rejections"
+@attribute [Authorize(Roles = "HOD")]
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>HOD Rejection History</h1><div class="page-subtitle">Chronological timeline of HOD-level rejections.</div></div>
+</div>
+
+<div class="fcard">
+  @if (!_rows.Any())
+  {
+    <div class="empty-state"><i class="bi bi-clock-history"></i>No HOD rejection history found.</div>
+  }
+  else
+  {
+    @foreach (var row in _rows)
+    {
+      <div class="border rounded p-3 mb-2">
+        <div class="fw-semibold">@row.GroupName - @row.ProjectTitle</div>
+        <div class="small text-muted">Rejected on @row.Record.RejectedAt.ToString("yyyy-MM-dd HH:mm")</div>
+        <div class="small">Reason: @row.Record.RejectionReason</div>
+        <div class="small">Resubmitted: @(row.Record.ResubmissionId.HasValue ? "Yes" : "Pending")</div>
+      </div>
+    }
+  }
+</div>
+
+@code {
+  private List<RowVm> _rows = new();
+
+  private sealed class RowVm
+  {
+    public RejectionHistory Record { get; set; } = new();
+    public string GroupName { get; set; } = string.Empty;
+    public string ProjectTitle { get; set; } = string.Empty;
+  }
+
+  protected override async Task OnInitializedAsync()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(id, out var userId))
+      return;
+
+    var records = await Db.RejectionHistories
+      .Where(r => r.RejectedByUserId == userId && r.RejectedByRole == UserRole.HOD.ToString())
+      .OrderByDescending(r => r.RejectedAt)
+      .ToListAsync();
+
+    var groupLookup = await Db.Groups.ToDictionaryAsync(g => g.Id, g => g.GroupName);
+    var proposalLookup = await Db.Proposals.ToDictionaryAsync(p => p.Id, p => p.Title);
+
+    _rows = records.Select(r => new RowVm
+    {
+      Record = r,
+      GroupName = groupLookup.TryGetValue(r.GroupId, out var groupName) ? groupName : "Unknown",
+      ProjectTitle = proposalLookup.TryGetValue(r.ProposalId, out var title) ? title : "Unknown"
+    }).ToList();
+  }
+}

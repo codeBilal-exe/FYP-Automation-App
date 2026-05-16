@@ -12,6 +12,23 @@
   <button class="btn btn-primary" @onclick="() => _showNew = true"><i class="bi bi-plus-lg me-1"></i>New User</button>
 </div>
 
+@if (!string.IsNullOrWhiteSpace(_createSuccess))
+{
+  <div class="alert alert-success">@_createSuccess</div>
+}
+@if (!string.IsNullOrWhiteSpace(_createError))
+{
+  <div class="alert alert-danger">@_createError</div>
+}
+@if (!string.IsNullOrWhiteSpace(_actionSuccess))
+{
+  <div class="alert alert-success">@_actionSuccess</div>
+}
+@if (!string.IsNullOrWhiteSpace(_actionError))
+{
+  <div class="alert alert-danger">@_actionError</div>
+}
+
 <div class="row g-3 mb-3">
   @foreach (var role in _roleCards)
   {
@@ -94,6 +111,10 @@
           @foreach (var r in Enum.GetValues<UserRole>()) { <option value="@r">@r</option> }
         </select>
       </div>
+      @if (!string.IsNullOrWhiteSpace(_createError))
+      {
+        <div class="alert alert-danger py-2">@_createError</div>
+      }
       <div class="d-flex justify-content-end gap-2">
         <button class="btn btn-light" @onclick="() => _showNew = false">Cancel</button>
         <button class="btn btn-primary" @onclick="Create">Create</button>
@@ -110,6 +131,10 @@
   private string _search = "";
   private UserRole? _selectedRole;
   private NewUser _n = new();
+  private string? _createError;
+  private string? _createSuccess;
+  private string? _actionError;
+  private string? _actionSuccess;
 
   private class NewUser
   {
@@ -165,20 +190,37 @@
 
   private async Task Create()
   {
-    var u = await UserService.CreateUser(_n.FullName, _n.Email, _n.Password, _n.Role);
-    if (u != null)
+    _createError = null;
+    _createSuccess = null;
+
+    var result = await UserService.CreateUserDetailed(_n.FullName, _n.Email, _n.Password, _n.Role);
+    if (result.Success && result.User != null)
     {
+      _createSuccess = result.Message;
       await AuditService.LogActionAsync(await GetActorId(), "UserCreate", _n.Email);
+      _showNew = false;
+      _n = new();
+      await LoadUsers();
+      return;
     }
-    _showNew = false;
-    _n = new();
-    await LoadUsers();
+
+    _createError = result.Message;
   }
 
   private async Task Deactivate(User u)
   {
-    await UserService.DeactivateUser(u.Id);
-    await AuditService.LogActionAsync(await GetActorId(), "UserDeactivate", u.Email);
+    _actionError = null;
+    _actionSuccess = null;
+
+    var result = await UserService.DeleteUserDetailed(u.Id);
+    if (!result.Success)
+    {
+      _actionError = result.Message;
+      return;
+    }
+
+    _actionSuccess = result.Message;
+    await AuditService.LogActionAsync(await GetActorId(), "UserDelete", u.Email);
     await LoadUsers();
   }
 }

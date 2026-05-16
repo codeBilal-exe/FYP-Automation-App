@@ -13,23 +13,48 @@ namespace FYP_AutomationSystem.Services
             _context = context;
         }
 
-        public async Task<Notification?> CreateNotification(string title, string message, NotificationType type, int recipientId)
+        public async Task<Notification?> CreateNotification(
+            string title,
+            string description,
+            NotificationType type,
+            int recipientId,
+            string eventType = "general",
+            string? referenceId = null,
+            string? linkUrl = null,
+            TimeSpan? dedupeWindow = null)
         {
             try
             {
-                var recipient = await _context.Users.FirstOrDefaultAsync(u => u.Id == recipientId);
+                var recipient = await _context.Users.FirstOrDefaultAsync(u => u.Id == recipientId && u.IsActive);
                 if (recipient == null)
                     return null;
 
+                var window = dedupeWindow ?? TimeSpan.FromSeconds(60);
+                var since = DateTime.UtcNow.Subtract(window);
+                var duplicateExists = await _context.Notifications.AnyAsync(n =>
+                    n.RecipientId == recipientId &&
+                    n.EventType == eventType &&
+                    n.ReferenceId == referenceId &&
+                    n.CreatedAt >= since);
+
+                if (duplicateExists)
+                    return null;
+
+                var now = DateTime.UtcNow;
                 var notification = new Notification
                 {
                     Title = title,
-                    Message = message,
+                    Description = description,
                     Type = type,
                     RecipientId = recipientId,
+                    RecipientRole = recipient.Role.ToString(),
+                    EventType = eventType,
+                    ReferenceId = referenceId,
+                    LinkUrl = linkUrl,
                     IsRead = false,
-                    CreatedAt = DateTime.UtcNow,
-                    SentAt = DateTime.UtcNow
+                    CreatedAt = now,
+                    SentAt = now,
+                    ExpiresAt = now.AddDays(30)
                 };
 
                 _context.Notifications.Add(notification);
@@ -43,69 +68,54 @@ namespace FYP_AutomationSystem.Services
             }
         }
 
-        public async Task NotifyHODDecision(int proposalId, bool approved, string? feedback)
+        public async Task<int> CreateNotificationsForUsers(
+            IEnumerable<int> recipientIds,
+            string title,
+            string description,
+            NotificationType type,
+            string eventType,
+            string? referenceId,
+            string? linkUrl)
         {
-            var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.Id == proposalId)
-                ?? throw new InvalidOperationException("Proposal not found.");
+            var uniqueIds = recipientIds.Distinct().ToList();
+            var created = 0;
 
-            var group = await _context.Groups
-                .Include(g => g.Members)
-                .Include(g => g.Supervisor)
-                .FirstOrDefaultAsync(g => g.Id == proposal.GroupId)
-                ?? throw new InvalidOperationException("Group not found for proposal.");
-
-            var coordinator = await _context.Users.FirstOrDefaultAsync(u => u.Role == UserRole.Coordinator && u.IsActive);
-            var hod = await _context.Users.FirstOrDefaultAsync(u => u.Role == UserRole.HOD && u.IsActive);
-
-            var message = approved
-                ? "Your proposal has been approved by the HOD. Your project is now Active."
-                : $"Your proposal has been rejected by the HOD. Reason: {feedback}";
-
-            var recipients = new List<int>();
-            recipients.AddRange(group.Members.Select(m => m.Id));
-            if (group.SupervisorId > 0) recipients.Add(group.SupervisorId);
-            if (coordinator != null) recipients.Add(coordinator.Id);
-            recipients = recipients.Distinct().ToList();
-
-            foreach (var recipientId in recipients)
+            foreach (var recipientId in uniqueIds)
             {
-                _context.Notifications.Add(new Notification
+                var notification = await CreateNotification(title, description, type, recipientId, eventType, referenceId, linkUrl);
+                if (notification != null)
                 {
-                    Title = approved ? "Proposal Approved by HOD" : "Proposal Rejected by HOD",
-                    Message = message,
-                    Type = NotificationType.ProposalDecision,
-                    RecipientId = recipientId,
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow,
-                    SentAt = DateTime.UtcNow
-                });
+                    created++;
+                }
             }
 
-            if (hod != null)
-            {
-                _context.Notifications.Add(new Notification
-                {
-                    Title = "HOD Decision Recorded",
-                    Message = approved
-                        ? $"You approved proposal #{proposalId}."
-                        : $"You rejected proposal #{proposalId}.",
-                    Type = NotificationType.ProposalDecision,
-                    RecipientId = hod.Id,
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow,
-                    SentAt = DateTime.UtcNow
-                });
-            }
+            return created;
+        }
 
-            await _context.SaveChangesAsync();
+        public async Task NotifyProposalStatusForGroup(
+            int groupId,
+            string title,
+            string message,
+            NotificationType type,
+            string eventType,
+            string referenceId,
+            string linkUrl)
+        {
+            var group = await _context.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId);
+            if (group == null)
+                return;
+
+            var recipientIds = group.Members.Select(m => m.Id).Distinct();
+            await CreateNotificationsForUsers(recipientIds, title, message, type, eventType, referenceId, linkUrl);
         }
 
         public async Task<List<Notification>> GetNotificationsByUser(int userId)
         {
             try
             {
+                var now = DateTime.UtcNow;
                 return await _context.Notifications
-                    .Where(n => n.RecipientId == userId)
+                    .Where(n => n.RecipientId == userId && n.ExpiresAt >= now)
                     .OrderByDescending(n => n.CreatedAt)
                     .ToListAsync();
             }
@@ -140,7 +150,8 @@ namespace FYP_AutomationSystem.Services
         {
             try
             {
-                return await _context.Notifications.CountAsync(n => n.RecipientId == userId && !n.IsRead);
+                var now = DateTime.UtcNow;
+                return await _context.Notifications.CountAsync(n => n.RecipientId == userId && !n.IsRead && n.ExpiresAt >= now);
             }
             catch (Exception ex)
             {
@@ -174,7 +185,9 @@ namespace FYP_AutomationSystem.Services
             {
                 var notifications = await _context.Notifications.Where(n => n.RecipientId == userId && !n.IsRead).ToListAsync();
                 foreach (var notification in notifications)
+                {
                     notification.IsRead = true;
+                }
 
                 _context.Notifications.UpdateRange(notifications);
                 await _context.SaveChangesAsync();
@@ -187,12 +200,32 @@ namespace FYP_AutomationSystem.Services
             }
         }
 
+        public async Task<bool> ClearAll(int userId)
+        {
+            try
+            {
+                var notifications = await _context.Notifications.Where(n => n.RecipientId == userId).ToListAsync();
+                if (notifications.Count == 0)
+                    return true;
+
+                _context.Notifications.RemoveRange(notifications);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Clear all notifications error: {ex.Message}");
+                return false;
+            }
+        }
+
         public async Task<List<Notification>> GetUnreadNotifications(int userId)
         {
             try
             {
+                var now = DateTime.UtcNow;
                 return await _context.Notifications
-                    .Where(n => n.RecipientId == userId && !n.IsRead)
+                    .Where(n => n.RecipientId == userId && !n.IsRead && n.ExpiresAt >= now)
                     .OrderByDescending(n => n.CreatedAt)
                     .ToListAsync();
             }
@@ -200,19 +233,6 @@ namespace FYP_AutomationSystem.Services
             {
                 Console.WriteLine($"Get unread notifications error: {ex.Message}");
                 return new List<Notification>();
-            }
-        }
-
-        public async Task<Notification?> GetNotificationById(int id)
-        {
-            try
-            {
-                return await _context.Notifications.FirstOrDefaultAsync(n => n.Id == id);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Get notification by id error: {ex.Message}");
-                return null;
             }
         }
 
@@ -227,12 +247,26 @@ namespace FYP_AutomationSystem.Services
                     _context.Notifications.RemoveRange(oldNotifications);
                     await _context.SaveChangesAsync();
                 }
+
                 return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Delete old notifications error: {ex.Message}");
                 return false;
+            }
+        }
+
+        public async Task<Notification?> GetNotificationById(int id)
+        {
+            try
+            {
+                return await _context.Notifications.FirstOrDefaultAsync(n => n.Id == id);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Get notification by id error: {ex.Message}");
+                return null;
             }
         }
     }

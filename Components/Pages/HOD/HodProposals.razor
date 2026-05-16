@@ -2,15 +2,20 @@
 @attribute [Authorize(Roles = "HOD")]
 @inject ProposalService ProposalService
 @inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
-  <div><h1>Pending HOD Proposals</h1><div class="page-subtitle">Final approval queue after coordinator sign-off.</div></div>
+  <div><h1>HOD Proposal Review</h1><div class="page-subtitle">Review supervisor-approved proposals and forward to coordinator.</div></div>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(_error))
 {
   <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
 }
 
 <div class="fcard">
@@ -22,52 +27,57 @@
   {
     <table class="ftable">
       <thead>
-        <tr><th>Title</th><th>Group</th><th>Coordinator Approved</th><th>Status</th><th class="text-end">Actions</th></tr>
+        <tr><th>Title</th><th>Group</th><th>Submitted</th><th>Status</th><th class="text-end">Actions</th></tr>
       </thead>
       <tbody>
         @foreach (var row in _rows)
         {
           <tr>
-            <td>@row.Proposal.Title</td>
+            <td>
+              <div class="fw-semibold">@row.Proposal.Title</div>
+              @if (!string.IsNullOrWhiteSpace(row.Proposal.DocumentPath))
+              {
+                <div class="small"><a href="@row.Proposal.DocumentPath" target="_blank">Download / View Document</a></div>
+              }
+            </td>
             <td>@row.GroupName</td>
-            <td>@row.Proposal.CoordinatorApprovedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@row.Proposal.SubmittedAt.ToString("yyyy-MM-dd HH:mm")</td>
             <td><span class="fbadge warning">@row.Proposal.Status</span></td>
             <td class="text-end">
-              <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(row.Proposal.Id)">Approve</button>
-              <button class="btn btn-sm btn-outline-danger" @onclick="() => ToggleReject(row.Proposal.Id)">Reject</button>
+              <button class="btn btn-sm btn-success me-1" @onclick="() => OpenApprove(row.Proposal)">Approve</button>
+              <button class="btn btn-sm btn-outline-danger" @onclick="() => OpenReject(row.Proposal)">Reject</button>
             </td>
           </tr>
-          @if (_rejectingProposalId == row.Proposal.Id)
-          {
-            <tr>
-              <td colspan="5">
-                <div class="p-2 border rounded">
-                  <label class="form-label">Rejection reason (required, minimum 10 characters)</label>
-                  <textarea class="form-control" rows="3" @bind="_rejectionReason"></textarea>
-                  @if (!string.IsNullOrWhiteSpace(_validationError))
-                  {
-                    <div class="text-danger small mt-1">@_validationError</div>
-                  }
-                  <div class="mt-2 d-flex gap-2 justify-content-end">
-                    <button class="btn btn-light btn-sm" @onclick="CancelReject">Cancel</button>
-                    <button class="btn btn-danger btn-sm" @onclick="() => Reject(row.Proposal.Id)">Confirm Reject</button>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          }
         }
       </tbody>
     </table>
   }
 </div>
 
+@if (_selected != null)
+{
+  <div class="modal-backdrop-c" @onclick="CloseDialog">
+    <div class="modal-card" @onclick:stopPropagation>
+      <h5>@(_isReject ? "Reject Proposal" : "Approve Proposal")</h5>
+      <p class="text-muted small">Project: @_selected.Title</p>
+      <label class="form-label">Comments @(_isReject ? "(required)" : "(optional)")</label>
+      <textarea class="form-control mb-3" rows="4" @bind="_comments"></textarea>
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-light" @onclick="CloseDialog">Cancel</button>
+        <button class="btn @(_isReject ? "btn-danger" : "btn-success")" @onclick="ConfirmDecision">Confirm</button>
+      </div>
+    </div>
+  </div>
+}
+
 @code {
   private List<RowVm> _rows = new();
   private string? _error;
-  private int? _rejectingProposalId;
-  private string _rejectionReason = string.Empty;
-  private string? _validationError;
+  private string? _msg;
+  private Proposal? _selected;
+  private bool _isReject;
+  private string _comments = string.Empty;
+  private int _hodId;
 
   private sealed class RowVm
   {
@@ -75,11 +85,20 @@
     public string GroupName { get; set; } = string.Empty;
   }
 
-  protected override async Task OnInitializedAsync() => await Load();
+  protected override async Task OnInitializedAsync()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _hodId = int.TryParse(id, out var userId) ? userId : 0;
+    await Load();
+  }
 
   private async Task Load()
   {
-    var proposals = await ProposalService.GetPendingHODProposalsAsync();
+    _selected = null;
+    _comments = string.Empty;
+
+    var proposals = await ProposalService.GetPendingProposalsForRoleAsync(UserRole.HOD, _hodId);
     var groupLookup = await Db.Groups.ToDictionaryAsync(g => g.Id, g => g.GroupName);
     _rows = proposals.Select(p => new RowVm
     {
@@ -88,56 +107,65 @@
     }).ToList();
   }
 
-  private async Task Approve(int proposalId)
+  private void OpenApprove(Proposal proposal)
   {
+    _selected = proposal;
+    _isReject = false;
+    _comments = string.Empty;
     _error = null;
-    try
-    {
-      var hodId = AuthService.CurrentUser?.Id ?? 0;
-      await ProposalService.ApproveByHOD(proposalId, hodId);
-      await Load();
-    }
-    catch (Exception ex)
-    {
-      _error = ex.Message;
-    }
   }
 
-  private void ToggleReject(int proposalId)
+  private void OpenReject(Proposal proposal)
   {
-    _rejectingProposalId = proposalId;
-    _rejectionReason = string.Empty;
-    _validationError = null;
-  }
-
-  private void CancelReject()
-  {
-    _rejectingProposalId = null;
-    _rejectionReason = string.Empty;
-    _validationError = null;
-  }
-
-  private async Task Reject(int proposalId)
-  {
+    _selected = proposal;
+    _isReject = true;
+    _comments = string.Empty;
     _error = null;
-    _validationError = null;
+  }
 
-    if (string.IsNullOrWhiteSpace(_rejectionReason) || _rejectionReason.Trim().Length < 10)
-    {
-      _validationError = "Rejection reason must be at least 10 characters.";
+  private void CloseDialog()
+  {
+    _selected = null;
+    _comments = string.Empty;
+  }
+
+  private async Task ConfirmDecision()
+  {
+    if (_selected == null)
       return;
+
+    _error = null;
+    _msg = null;
+
+    if (_isReject)
+    {
+      if (string.IsNullOrWhiteSpace(_comments) || _comments.Trim().Length < 5)
+      {
+        _error = "Rejection reason is required.";
+        return;
+      }
+
+      var result = await ProposalService.RejectProposalAsync(_selected.Id, _hodId, UserRole.HOD, _comments.Trim());
+      if (!result.Success)
+      {
+        _error = result.Message;
+        return;
+      }
+
+      _msg = "Proposal rejected.";
+    }
+    else
+    {
+      var result = await ProposalService.ApproveProposalAsync(_selected.Id, _hodId, UserRole.HOD, string.IsNullOrWhiteSpace(_comments) ? null : _comments.Trim());
+      if (!result.Success)
+      {
+        _error = result.Message;
+        return;
+      }
+
+      _msg = "Proposal approved and forwarded to coordinator.";
     }
 
-    try
-    {
-      var hodId = AuthService.CurrentUser?.Id ?? 0;
-      await ProposalService.RejectByHOD(proposalId, hodId, _rejectionReason.Trim());
-      CancelReject();
-      await Load();
-    }
-    catch (Exception ex)
-    {
-      _error = ex.Message;
-    }
+    await Load();
   }
 }

@@ -1,24 +1,49 @@
 @page "/notifications"
 @attribute [Authorize]
 @inject NotificationService NotificationService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthProvider
 
-<div class="page-header"><div><h1>Notifications</h1><div class="page-subtitle">All your alerts in one place.</div></div>
-  <button class="btn btn-soft" @onclick="MarkAll"><i class="bi bi-check2-all me-1"></i>Mark all read</button>
+<div class="page-header">
+  <div><h1>Notifications</h1><div class="page-subtitle">All your alerts in one place.</div></div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-soft" @onclick="MarkAll"><i class="bi bi-check2-all me-1"></i>Mark all read</button>
+    <button class="btn btn-outline-danger" @onclick="ClearAll"><i class="bi bi-trash me-1"></i>Clear All</button>
+  </div>
 </div>
 
 <div class="fcard">
-  @if (!_items.Any()) { <div class="empty-state"><i class="bi bi-bell-slash"></i>No notifications.</div> }
+  @if (!_items.Any())
+  {
+    <div class="empty-state"><i class="bi bi-bell-slash"></i>No notifications.</div>
+  }
   else
   {
     @foreach (var n in _items)
     {
-      <div class="py-2 border-bottom d-flex justify-content-between align-items-start">
+      <div class="py-2 border-bottom d-flex justify-content-between align-items-start gap-2">
         <div>
-          <div class="d-flex align-items-center gap-2"><strong>@n.Title</strong><span class="fbadge @TypeClass(n.Type)">@n.Type</span></div>
-          <div class="text-muted small">@n.Message</div>
-          <div class="text-muted small">@n.CreatedAt.ToString("MMM dd, HH:mm")</div>
+          <div class="d-flex align-items-center gap-2">
+            <strong>@n.Title</strong>
+            <span class="fbadge @TypeClass(n.Type)">@n.Type</span>
+            @if (!n.IsRead)
+            {
+              <span class="badge bg-danger">Unread</span>
+            }
+          </div>
+          <div class="text-muted small">@n.Description</div>
+          <div class="text-muted small">@n.CreatedAt.ToString("MMM dd, yyyy HH:mm")</div>
         </div>
-        @if (!n.IsRead) { <button class="btn btn-sm btn-soft" @onclick="() => MarkOne(n)"><i class="bi bi-check"></i></button> }
+        <div class="d-flex gap-1">
+          @if (!string.IsNullOrWhiteSpace(n.LinkUrl))
+          {
+            <button class="btn btn-sm btn-primary" @onclick="() => OpenLink(n)">Open</button>
+          }
+          @if (!n.IsRead)
+          {
+            <button class="btn btn-sm btn-soft" @onclick="() => MarkOne(n)"><i class="bi bi-check"></i></button>
+          }
+        </div>
       </div>
     }
   }
@@ -26,15 +51,69 @@
 
 @code {
   private List<Notification> _items = new();
-  protected override async Task OnInitializedAsync() => await Load();
+  private int _userId;
+
+  protected override async Task OnInitializedAsync()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _userId = int.TryParse(id, out var userId) ? userId : 0;
+
+    await Load();
+    if (_userId > 0)
+    {
+      await NotificationService.MarkAllAsRead(_userId);
+      await Load();
+    }
+  }
+
   private async Task Load()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    _items = await NotificationService.GetNotificationsByUser(u.Id);
+    if (_userId <= 0)
+      return;
+
+    _items = await NotificationService.GetNotificationsByUser(_userId);
   }
-  private async Task MarkOne(Notification n) { await NotificationService.MarkAsRead(n.Id); await Load(); }
-  private async Task MarkAll() { var u = AuthService.CurrentUser; if (u != null) { await NotificationService.MarkAllAsRead(u.Id); await Load(); } }
-  private static string TypeClass(NotificationType t) => t switch {
+
+  private async Task MarkOne(Notification n)
+  {
+    await NotificationService.MarkAsRead(n.Id);
+    await Load();
+  }
+
+  private async Task MarkAll()
+  {
+    if (_userId <= 0)
+      return;
+
+    await NotificationService.MarkAllAsRead(_userId);
+    await Load();
+  }
+
+  private async Task ClearAll()
+  {
+    if (_userId <= 0)
+      return;
+
+    await NotificationService.ClearAll(_userId);
+    await Load();
+  }
+
+  private async Task OpenLink(Notification n)
+  {
+    if (!n.IsRead)
+    {
+      await NotificationService.MarkAsRead(n.Id);
+    }
+
+    if (!string.IsNullOrWhiteSpace(n.LinkUrl))
+    {
+      Navigation.NavigateTo(n.LinkUrl);
+    }
+  }
+
+  private static string TypeClass(NotificationType t) => t switch
+  {
     NotificationType.Success => "completed",
     NotificationType.Warning => "warning",
     NotificationType.Deadline => "danger",

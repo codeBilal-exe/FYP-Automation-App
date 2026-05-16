@@ -12,9 +12,11 @@
     {
         <NavLink class="nav-item-link" href="/supervisor/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/proposals"><i class="bi bi-clipboard-check"></i><span>Review Proposals</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/milestones"><i class="bi bi-flag"></i><span>Assign Milestones</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/progress"><i class="bi bi-graph-up"></i><span>Track Progress</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/evaluate"><i class="bi bi-star"></i><span>Evaluate</span></NavLink>
         <NavLink class="nav-item-link" href="/supervisor/groups"><i class="bi bi-diagram-3"></i><span>My Groups</span></NavLink>
+        <NavLink class="nav-item-link" href="/supervisor/rejections"><i class="bi bi-clock-history"></i><span>Rejection History</span></NavLink>
     }
     else if (Role == "HOD")
     {
@@ -22,6 +24,7 @@
             <Authorized>
                 <NavLink class="nav-item-link" href="/hod/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
                 <NavLink class="nav-item-link" href="/hod/proposals"><i class="bi bi-hourglass-split"></i><span>Pending Proposals</span></NavLink>
+                <NavLink class="nav-item-link" href="/hod/rejections"><i class="bi bi-clock-history"></i><span>Rejection History</span></NavLink>
                 <NavLink class="nav-item-link" href="/hod/reports"><i class="bi bi-bar-chart"></i><span>Reports</span></NavLink>
             </Authorized>
         </AuthorizeView>
@@ -48,9 +51,34 @@
 
     <div class="nav-divider"></div>
     <NavLink class="nav-item-link" href="/notifications"><i class="bi bi-bell"></i><span>Notifications</span></NavLink>
-    <NavLink class="nav-item-link" href="/messages"><i class="bi bi-chat-dots"></i><span>Messages</span></NavLink>
+    <NavLink class="nav-item-link position-relative" href="/messages">
+        <i class="bi bi-chat-dots"></i><span>Messages</span>
+        @if (UnreadMessages > 0)
+        {
+            <span class="message-dot">@UnreadMessages</span>
+        }
+    </NavLink>
 </nav>
 
 @code {
     [Parameter] public string Role { get; set; } = "";
+    [Parameter] public int UnreadMessages { get; set; }
 }
+
+<style>
+.message-dot {
+    position: absolute;
+    right: 10px;
+    top: 6px;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: .7rem;
+    line-height: 18px;
+    text-align: center;
+    padding: 0 5px;
+    font-weight: 700;
+}
+</style>

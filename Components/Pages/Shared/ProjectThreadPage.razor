@@ -1,0 +1,422 @@
+@page "/project/thread/{GroupId:int}"
+@attribute [Authorize(Roles = "Student,Supervisor")]
+@inject AppDbContext Db
+@inject ProjectThreadService ProjectThreadService
+@inject AuthenticationStateProvider AuthProvider
+@inject IWebHostEnvironment Env
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div>
+    <h1>Project Thread</h1>
+    <div class="page-subtitle">@_subtitle</div>
+  </div>
+  <button class="btn btn-soft" @onclick="Load">Refresh</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
+}
+
+@if (_thread == null)
+{
+  <div class="fcard"><div class="empty-state"><i class="bi bi-diagram-3"></i>No project thread is active for this group yet.</div></div>
+}
+else
+{
+  <div class="row g-3 mb-3">
+    <div class="col-md-4"><div class="fcard"><div class="small text-muted">Status</div><div class="fw-semibold">@_thread.Status</div></div></div>
+    <div class="col-md-4"><div class="fcard"><div class="small text-muted">Project Due</div><div class="fw-semibold">@_thread.OverallDeadline.ToString("yyyy-MM-dd")</div></div></div>
+    <div class="col-md-4"><div class="fcard"><div class="small text-muted">Remaining</div><div class="fw-semibold">@RemainingDaysLabel(_thread.OverallDeadline)</div></div></div>
+  </div>
+
+  @if (_isSupervisor)
+  {
+    <div class="fcard mb-3">
+      <div class="fcard-title"><i class="bi bi-list-task"></i> Assign Task</div>
+      <div class="row g-2">
+        <div class="col-md-6"><label class="form-label">Task Title</label><input class="form-control" @bind="_taskTitle" /></div>
+        <div class="col-md-6"><label class="form-label">Priority</label>
+          <select class="form-select" @bind="_taskPriority">
+            <option>Low</option><option>Medium</option><option>High</option>
+          </select>
+        </div>
+        <div class="col-12"><label class="form-label">Task Description</label><textarea class="form-control" rows="3" @bind="_taskDescription"></textarea></div>
+        <div class="col-md-6"><label class="form-label">Deadline Date & Time</label><input class="form-control" type="datetime-local" @bind-value="_taskDeadline" @bind-value:format="yyyy-MM-ddTHH:mm" /></div>
+        <div class="col-md-6"><label class="form-label">Attached Resources (optional)</label><InputFile class="form-control" OnChange="OnResourceSelected" accept=".pdf,.docx,.png,.jpg,.jpeg" /></div>
+        <div class="col-md-6">
+          <label class="form-label">Assign To</label>
+          <select class="form-select" @bind="_assignMode">
+            <option value="all">All Members</option>
+            <option value="specific">Specific Members</option>
+          </select>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="progressDemand" @bind="_isProgressDemand" />
+            <label class="form-check-label" for="progressDemand">Demand Progress Update</label>
+          </div>
+        </div>
+        @if (_assignMode == "specific")
+        {
+          <div class="col-12">
+            <label class="form-label">Choose Members</label>
+            <div class="d-flex flex-wrap gap-2">
+              @foreach (var m in _groupMembers)
+              {
+                <label class="btn btn-light btn-sm">
+                  <input type="checkbox" class="form-check-input me-1" checked="@_selectedAssignees.Contains(m.Id)" @onchange="e => ToggleAssignee(m.Id, e.Value)" /> @m.FullName
+                </label>
+              }
+            </div>
+          </div>
+        }
+      </div>
+      <div class="mt-3 d-flex justify-content-end"><button class="btn btn-primary" @onclick="AssignTask">Assign Task</button></div>
+    </div>
+  }
+
+  <div class="fcard">
+    <div class="fcard-title"><i class="bi bi-kanban"></i> Task Board</div>
+    @if (!_tasks.Any())
+    {
+      <div class="text-muted small">No tasks posted yet.</div>
+    }
+    else
+    {
+      @foreach (var task in _tasks)
+      {
+        var nearDeadline = task.Deadline <= DateTime.UtcNow.AddHours(48) && task.Status != "Approved";
+        <div class="border rounded p-3 mb-2">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">@task.Title @if (task.IsProgressUpdateDemand) { <span class="badge bg-warning text-dark">Progress Update</span> }</div>
+              <div class="small text-muted">@task.Description</div>
+              <div class="small text-muted">Deadline: @task.Deadline.ToString("yyyy-MM-dd HH:mm") (@RemainingDaysLabel(task.Deadline))</div>
+              @if (nearDeadline)
+              {
+                <div class="text-danger small fw-semibold">Deadline within 48 hours</div>
+              }
+              @if (!string.IsNullOrWhiteSpace(task.ResourcePath))
+              {
+                <div class="small"><a href="@task.ResourcePath" target="_blank">Open Resource</a></div>
+              }
+            </div>
+            <div class="text-end">
+              <span class="fbadge @PriorityClass(task.Priority)">@task.Priority</span>
+              <div><span class="fbadge active">@task.Status</span></div>
+            </div>
+          </div>
+
+          @if (_isStudent)
+          {
+            <div class="mt-2">
+              <button class="btn btn-sm btn-soft" @onclick="() => ToggleStudentSubmit(task.Id)">Submit Task</button>
+            </div>
+            @if (_studentSubmitTaskId == task.Id)
+            {
+              <div class="mt-2 border-top pt-2">
+                <label class="form-label">Submission Comment</label>
+                <textarea class="form-control mb-2" rows="3" @bind="_studentSubmissionText"></textarea>
+                <label class="form-label">Upload Deliverable (PDF or DOCX)</label>
+                <InputFile class="form-control mb-2" OnChange="OnDeliverableSelected" accept=".pdf,.doc,.docx" />
+                <div class="d-flex gap-2 justify-content-end">
+                  <button class="btn btn-light btn-sm" @onclick="() => _studentSubmitTaskId = null">Cancel</button>
+                  <button class="btn btn-primary btn-sm" @onclick="() => SubmitTask(task.Id)">Submit</button>
+                </div>
+              </div>
+            }
+          }
+
+          @if (_isSupervisor)
+          {
+            var submission = _latestSubmissionByTask.GetValueOrDefault(task.Id);
+            if (submission != null)
+            {
+              <div class="mt-2 border-top pt-2">
+                <div class="small"><strong>Latest submission:</strong> @submission.SubmissionText</div>
+                <div class="small text-muted">Submitted @submission.SubmittedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                @if (!string.IsNullOrWhiteSpace(submission.FilePath))
+                {
+                  <div class="small"><a href="@submission.FilePath" target="_blank">Open Deliverable</a></div>
+                }
+                <textarea class="form-control mt-2" rows="2" placeholder="Feedback" @bind="_reviewFeedback"></textarea>
+                <div class="d-flex gap-2 justify-content-end mt-2">
+                  <button class="btn btn-success btn-sm" @onclick="() => ReviewTask(task.Id, true)">Approve</button>
+                  <button class="btn btn-warning btn-sm" @onclick="() => ReviewTask(task.Id, false)">Request Revision</button>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      }
+    }
+  </div>
+}
+
+@code {
+  [Parameter] public int GroupId { get; set; }
+
+  private ProjectThread? _thread;
+  private List<ProjectTask> _tasks = new();
+  private List<User> _groupMembers = new();
+  private Dictionary<int, TaskSubmission> _latestSubmissionByTask = new();
+  private User? _currentUser;
+  private bool _isSupervisor;
+  private bool _isStudent;
+  private string _subtitle = "";
+  private string? _error;
+  private string? _msg;
+
+  private string _taskTitle = string.Empty;
+  private string _taskDescription = string.Empty;
+  private string _taskPriority = "Medium";
+  private DateTime _taskDeadline = DateTime.UtcNow.AddDays(3);
+  private string _assignMode = "all";
+  private HashSet<int> _selectedAssignees = new();
+  private bool _isProgressDemand;
+  private IBrowserFile? _resourceFile;
+
+  private int? _studentSubmitTaskId;
+  private string _studentSubmissionText = string.Empty;
+  private IBrowserFile? _deliverableFile;
+
+  private string _reviewFeedback = string.Empty;
+
+  protected override async Task OnInitializedAsync()
+  {
+    await Load();
+  }
+
+  private async Task Load()
+  {
+    _error = null;
+    _msg = null;
+
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(id, out var userId))
+    {
+      _error = "Unable to resolve current user.";
+      return;
+    }
+
+    _currentUser = await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+    if (_currentUser == null)
+    {
+      _error = "User not found.";
+      return;
+    }
+
+    _isSupervisor = _currentUser.Role == UserRole.Supervisor;
+    _isStudent = _currentUser.Role == UserRole.Student;
+
+    var group = await Db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == GroupId);
+    if (group == null)
+    {
+      _error = "Group not found.";
+      return;
+    }
+
+    if (_isSupervisor && group.SupervisorId != _currentUser.Id)
+    {
+      _error = "You are not assigned to this group.";
+      return;
+    }
+
+    if (_isStudent && !group.Members.Any(m => m.Id == _currentUser.Id))
+    {
+      _error = "You are not a member of this group.";
+      return;
+    }
+
+    _groupMembers = group.Members.ToList();
+    _subtitle = $"{group.GroupName} | Project Due: {_thread?.OverallDeadline:yyyy-MM-dd}";
+
+    _thread = await ProjectThreadService.GetThreadByGroupIdAsync(group.Id);
+    _tasks = _thread == null ? new List<ProjectTask>() : await ProjectThreadService.GetTasksByGroupIdAsync(group.Id);
+
+    var taskIds = _tasks.Select(t => t.Id).ToList();
+    _latestSubmissionByTask = await Db.TaskSubmissions
+      .Where(s => taskIds.Contains(s.TaskId))
+      .GroupBy(s => s.TaskId)
+      .Select(g => g.OrderByDescending(x => x.SubmittedAt).First())
+      .ToDictionaryAsync(s => s.TaskId, s => s);
+
+    if (_thread != null)
+    {
+      _subtitle = $"{group.GroupName} | Project Due: {_thread.OverallDeadline:yyyy-MM-dd} - {RemainingDaysLabel(_thread.OverallDeadline)}";
+    }
+  }
+
+  private async Task OnResourceSelected(InputFileChangeEventArgs e)
+  {
+    _resourceFile = e.File;
+    await Task.CompletedTask;
+  }
+
+  private async Task OnDeliverableSelected(InputFileChangeEventArgs e)
+  {
+    _deliverableFile = e.File;
+    await Task.CompletedTask;
+  }
+
+  private void ToggleAssignee(int memberId, object? value)
+  {
+    var isChecked = value is bool b && b;
+    if (isChecked)
+    {
+      _selectedAssignees.Add(memberId);
+    }
+    else
+    {
+      _selectedAssignees.Remove(memberId);
+    }
+  }
+
+  private async Task AssignTask()
+  {
+    if (!_isSupervisor || _currentUser == null || _thread == null)
+      return;
+
+    _error = null;
+    _msg = null;
+
+    var deadline = _taskDeadline;
+
+    var resource = await SaveTaskFile(_resourceFile, new[] { ".pdf", ".docx", ".png", ".jpg", ".jpeg" }, 10 * 1024 * 1024, "task-resources");
+    if (!resource.Success)
+    {
+      _error = resource.Message;
+      return;
+    }
+
+    var assignees = _assignMode == "specific" ? _selectedAssignees.ToList() : null;
+    var created = await ProjectThreadService.AssignTaskAsync(
+      _thread.Id,
+      GroupId,
+      _currentUser.Id,
+      _taskTitle,
+      _taskDescription,
+      deadline,
+      _taskPriority,
+      assignees,
+      _isProgressDemand,
+      resource.Path,
+      resource.Name);
+
+    if (created == null)
+    {
+      _error = "Unable to assign task.";
+      return;
+    }
+
+    _msg = "Task assigned.";
+    _taskTitle = string.Empty;
+    _taskDescription = string.Empty;
+    _taskPriority = "Medium";
+    _assignMode = "all";
+    _selectedAssignees.Clear();
+    _resourceFile = null;
+    _isProgressDemand = false;
+
+    await Load();
+  }
+
+  private void ToggleStudentSubmit(int taskId)
+  {
+    _studentSubmitTaskId = _studentSubmitTaskId == taskId ? null : taskId;
+    _studentSubmissionText = string.Empty;
+    _deliverableFile = null;
+  }
+
+  private async Task SubmitTask(int taskId)
+  {
+    if (!_isStudent || _currentUser == null)
+      return;
+
+    _error = null;
+    _msg = null;
+
+    var deliverable = await SaveTaskFile(_deliverableFile, new[] { ".pdf", ".doc", ".docx" }, 10 * 1024 * 1024, "task-submissions");
+    if (!deliverable.Success)
+    {
+      _error = deliverable.Message;
+      return;
+    }
+
+    var submission = await ProjectThreadService.SubmitTaskAsync(taskId, _currentUser.Id, _studentSubmissionText, deliverable.Path, deliverable.Name);
+    if (submission == null)
+    {
+      _error = "Unable to submit task.";
+      return;
+    }
+
+    _msg = "Task submitted.";
+    _studentSubmitTaskId = null;
+    _studentSubmissionText = string.Empty;
+    _deliverableFile = null;
+    await Load();
+  }
+
+  private async Task ReviewTask(int taskId, bool approve)
+  {
+    if (!_isSupervisor)
+      return;
+
+    var ok = await ProjectThreadService.ReviewSubmissionAsync(taskId, approve, _reviewFeedback);
+    if (!ok)
+    {
+      _error = "Unable to save review.";
+      return;
+    }
+
+    _msg = approve ? "Submission approved." : "Revision requested.";
+    _reviewFeedback = string.Empty;
+    await Load();
+  }
+
+  private async Task<(bool Success, string Message, string? Path, string? Name)> SaveTaskFile(IBrowserFile? file, string[] allowedExt, long maxBytes, string folder)
+  {
+    if (file == null)
+      return (true, string.Empty, null, null);
+
+    if (file.Size <= 0 || file.Size > maxBytes)
+      return (false, "File size exceeds maximum allowed limit.", null, null);
+
+    var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+    if (!allowedExt.Contains(ext))
+      return (false, "Invalid file type.", null, null);
+
+    var root = Path.Combine(Env.WebRootPath, "uploads", folder);
+    Directory.CreateDirectory(root);
+
+    var fileName = $"{Guid.NewGuid():N}{ext}";
+    var fullPath = Path.Combine(root, fileName);
+    await using var source = file.OpenReadStream(maxBytes);
+    await using var target = File.Create(fullPath);
+    await source.CopyToAsync(target);
+
+    return (true, string.Empty, $"/uploads/{folder}/{fileName}", file.Name);
+  }
+
+  private static string RemainingDaysLabel(DateTime deadline)
+  {
+    var days = (int)Math.Ceiling((deadline - DateTime.UtcNow).TotalDays);
+    return days >= 0 ? $"{days} days remaining" : $"Overdue by {Math.Abs(days)} days";
+  }
+
+  private static string PriorityClass(string priority) => priority.ToLowerInvariant() switch
+  {
+    "high" => "danger",
+    "medium" => "warning",
+    "low" => "info",
+    _ => "info"
+  };
+}

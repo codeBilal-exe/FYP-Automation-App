@@ -105,7 +105,7 @@ else
       .ToListAsync();
     _groupCount = _groups.Count;
 
-    var proposalPool = await ProposalService.GetProposalsByStatusAsync(ProposalStatus.SubmittedToSupervisor);
+    var proposalPool = await ProposalService.GetProposalsByStatusAsync(ProposalStatus.Submitted);
     var groupIds = _groups.Select(g => g.Id).ToHashSet();
     _pending = proposalPool.Where(p => groupIds.Contains(p.GroupId)).ToList();
     _pendingProposals = _pending.Count;

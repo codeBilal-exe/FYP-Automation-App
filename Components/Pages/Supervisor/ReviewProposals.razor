@@ -7,35 +7,39 @@
 @inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
-<div class="page-header"><div><h1>Review Proposals</h1><div class="page-subtitle">Approve or reject pending proposals.</div></div></div>
+<div class="page-header">
+  <div>
+    <h1>Pending Proposals</h1>
+    <div class="page-subtitle">Review proposals in your approval queue.</div>
+  </div>
+</div>
 
 @if (!string.IsNullOrWhiteSpace(_error))
 {
   <div class="alert alert-danger">@_error</div>
 }
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
+}
 
-<div class="fcard">
-  @if (!_proposals.Any()) { <div class="empty-state"><i class="bi bi-clipboard"></i>No proposals to review.</div> }
+<div class="fcard mb-3">
+  @if (!_proposals.Any())
+  {
+    <div class="empty-state"><i class="bi bi-clipboard"></i>No proposals to review.</div>
+  }
   else
   {
     <table class="ftable">
-      <thead><tr><th>Title</th><th>Student</th><th>Status</th><th>Submitted</th><th class="text-end">Actions</th></tr></thead>
+      <thead><tr><th>Group</th><th>Project Title</th><th>Submitted</th><th class="text-end">Action</th></tr></thead>
       <tbody>
         @foreach (var p in _proposals)
         {
-          var sName = _students.GetValueOrDefault(p.StudentId, "—");
           <tr>
-            <td>
-              <div class="fw-semibold">@p.Title</div>
-              <div class="small text-muted">@(p.Abstract.Length > 100 ? p.Abstract.Substring(0,100) + "…" : p.Abstract)</div>
-            </td>
-            <td>@sName</td>
-            <td><span class="fbadge @(p.Status == ProposalStatus.Rejected ? "danger" : "active")">@p.Status</span></td>
-            <td>@p.SubmittedAt.ToString("MMM dd, yyyy")</td>
-            <td class="text-end">
-              <button class="btn btn-sm btn-success me-1" @onclick="() => Approve(p)"><i class="bi bi-check-lg"></i></button>
-              <button class="btn btn-sm btn-outline-danger" @onclick="() => StartReject(p)"><i class="bi bi-x-lg"></i></button>
-            </td>
+            <td>@_groupNames.GetValueOrDefault(p.GroupId, "Unknown Group")</td>
+            <td>@p.Title</td>
+            <td>@p.SubmittedAt.ToString("yyyy-MM-dd HH:mm")</td>
+            <td class="text-end"><button class="btn btn-sm btn-primary" @onclick="() => OpenProposal(p)">Open</button></td>
           </tr>
         }
       </tbody>
@@ -43,55 +47,119 @@
   }
 </div>
 
-@if (_rejecting != null)
+@if (_selected != null)
 {
-  <div class="modal-backdrop-c" @onclick="() => _rejecting = null">
-    <div class="modal-card" @onclick:stopPropagation>
-      <h5 class="mb-2">Reject Proposal</h5>
-      <p class="text-muted small">Provide a reason for rejection.</p>
-      <textarea class="form-control mb-3" rows="3" @bind="_reason"></textarea>
-      <div class="d-flex justify-content-end gap-2">
-        <button class="btn btn-light" @onclick="() => _rejecting = null">Cancel</button>
-        <button class="btn btn-danger" @onclick="ConfirmReject">Reject</button>
+  <div class="fcard">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <h5 class="mb-1">@_selected.Title</h5>
+        <div class="small text-muted">Group: @_groupNames.GetValueOrDefault(_selected.GroupId, "Unknown Group")</div>
       </div>
+      <span class="fbadge active">@_selected.Status</span>
+    </div>
+
+    <div class="mb-2"><strong>Abstract</strong><div class="text-muted">@_selected.Abstract</div></div>
+    <div class="mb-2"><strong>Objectives</strong><div class="text-muted">@_selected.Objectives</div></div>
+    <div class="mb-2"><strong>Domain</strong><div class="text-muted">@_selected.Domain</div></div>
+    <div class="mb-2"><strong>Technologies</strong><div class="text-muted">@_selected.Technologies</div></div>
+    <div class="mb-2"><strong>GitHub URL</strong>
+      @if (!string.IsNullOrWhiteSpace(_selected.GitHubUrl))
+      {
+        <a href="@_selected.GitHubUrl" target="_blank">@_selected.GitHubUrl</a>
+      }
+      else
+      {
+        <span class="text-muted">Not provided</span>
+      }
+    </div>
+    <div class="mb-2"><strong>Submitted At</strong><div class="text-muted">@_selected.SubmittedAt.ToString("yyyy-MM-dd HH:mm")</div></div>
+    <div class="mb-3"><strong>Document</strong>
+      @if (!string.IsNullOrWhiteSpace(_selected.DocumentPath))
+      {
+        <div><a class="btn btn-sm btn-soft" href="@_selected.DocumentPath" target="_blank">Download / View Document</a></div>
+      }
+      else
+      {
+        <div class="text-muted">No document attached.</div>
+      }
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Comments / Feedback</label>
+      <textarea class="form-control" rows="4" @bind="_comments" placeholder="Required for reject, optional for approve"></textarea>
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end">
+      <button class="btn btn-success" @onclick="ApproveSelected">Approve</button>
+      <button class="btn btn-danger" @onclick="RejectSelected">Reject</button>
+      <button class="btn btn-light" @onclick="CloseSelected">Close</button>
     </div>
   </div>
 }
 
 @code {
   private List<Proposal> _proposals = new();
-  private Dictionary<int,string> _students = new();
-  private Proposal? _rejecting;
-  private string _reason = "";
+  private Dictionary<int, string> _groupNames = new();
+  private Proposal? _selected;
+  private string _comments = string.Empty;
   private string? _error;
+  private string? _msg;
+  private User? _currentUser;
 
   protected override async Task OnInitializedAsync()
   {
-    var u = await ResolveCurrentUser();
-    if (u == null) return;
-    var pending = u.Role switch
-    {
-      UserRole.Supervisor   => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.SubmittedToSupervisor),
-      UserRole.Coordinator  => await ProposalService.GetProposalsByStatusAsync(ProposalStatus.ApprovedBySupervisor),
-      _                     => new List<Proposal>()
-    };
-    _proposals = pending;
-    var ids = _proposals.Select(p => p.StudentId).Distinct().ToList();
-    _students = await Db.Users.Where(x => ids.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.FullName);
+    await Load();
   }
 
-  private async Task Approve(Proposal p)
+  private async Task Load()
   {
     _error = null;
-    var u = await ResolveCurrentUser();
-    if (u == null) return;
+    _msg = null;
+    _selected = null;
+    _comments = string.Empty;
+
+    _currentUser = await ResolveCurrentUser();
+    if (_currentUser == null)
+      return;
+
+    _proposals = await ProposalService.GetPendingProposalsForRoleAsync(_currentUser.Role, _currentUser.Id);
+    var groupIds = _proposals.Select(p => p.GroupId).Distinct().ToList();
+    _groupNames = await Db.Groups
+      .Where(g => groupIds.Contains(g.Id))
+      .ToDictionaryAsync(g => g.Id, g => g.GroupName);
+  }
+
+  private void OpenProposal(Proposal proposal)
+  {
+    _selected = proposal;
+    _comments = string.Empty;
+    _error = null;
+    _msg = null;
+  }
+
+  private void CloseSelected()
+  {
+    _selected = null;
+    _comments = string.Empty;
+  }
+
+  private async Task ApproveSelected()
+  {
+    if (_selected == null || _currentUser == null)
+      return;
 
     try
     {
-      await ProposalService.ApproveBySupervisorOrCoordinator(p.Id, u.Id, u.Role);
+      var result = await ProposalService.ApproveProposalAsync(_selected.Id, _currentUser.Id, _currentUser.Role, string.IsNullOrWhiteSpace(_comments) ? null : _comments.Trim());
+      if (!result.Success)
+      {
+        _error = result.Message;
+        return;
+      }
 
-      await AuditService.LogActionAsync(u.Id, "ProposalApprove", $"Proposal#{p.Id}");
-      await OnInitializedAsync();
+      await AuditService.LogActionAsync(_currentUser.Id, "PROPOSAL_APPROVE", $"Proposal#{_selected.Id} by {_currentUser.Role}");
+      _msg = "Decision saved.";
+      await Load();
     }
     catch (Exception ex)
     {
@@ -99,24 +167,43 @@
     }
   }
 
-  private void StartReject(Proposal p) { _rejecting = p; _reason = ""; }
-
-  private async Task ConfirmReject()
+  private async Task RejectSelected()
   {
-    if (_rejecting == null) return;
-    var u = await ResolveCurrentUser();
-    if (u == null) return;
-    await ProposalService.UpdateProposalStatusAsync(_rejecting.Id, ProposalStatus.Rejected, _reason);
-    await AuditService.LogActionAsync(u.Id, "ProposalReject", $"Proposal#{_rejecting.Id}: {_reason}");
-    _rejecting = null;
-    await OnInitializedAsync();
+    if (_selected == null || _currentUser == null)
+      return;
+
+    if (string.IsNullOrWhiteSpace(_comments))
+    {
+      _error = "Feedback is required when rejecting a proposal.";
+      return;
+    }
+
+    try
+    {
+      var result = await ProposalService.RejectProposalAsync(_selected.Id, _currentUser.Id, _currentUser.Role, _comments.Trim());
+      if (!result.Success)
+      {
+        _error = result.Message;
+        return;
+      }
+
+      await AuditService.LogActionAsync(_currentUser.Id, "PROPOSAL_REJECT", $"Proposal#{_selected.Id} by {_currentUser.Role}: {_comments.Trim()}");
+      _msg = "Decision saved.";
+      await Load();
+    }
+    catch (Exception ex)
+    {
+      _error = ex.Message;
+    }
   }
 
   private async Task<User?> ResolveCurrentUser()
   {
     var auth = await AuthProvider.GetAuthenticationStateAsync();
     var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-    if (!int.TryParse(id, out var userId)) return null;
+    if (!int.TryParse(id, out var userId))
+      return null;
+
     return await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
   }
 }

@@ -15,9 +15,19 @@ namespace FYP_AutomationSystem.Services
             _authService = authService;
         }
 
-        /// <summary>
-        /// Retrieves all active users
-        /// </summary>
+        public sealed class CreateUserResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; } = string.Empty;
+            public User? User { get; set; }
+        }
+
+        public sealed class DeleteUserResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; } = string.Empty;
+        }
+
         public async Task<List<User>> GetAllUsers()
         {
             try
@@ -33,9 +43,6 @@ namespace FYP_AutomationSystem.Services
             }
         }
 
-        /// <summary>
-        /// Retrieves a user by ID
-        /// </summary>
         public async Task<User?> GetUserById(int id)
         {
             try
@@ -50,47 +57,91 @@ namespace FYP_AutomationSystem.Services
             }
         }
 
-        /// <summary>
-        /// Creates a new user with hashed password
-        /// </summary>
-        public async Task<User?> CreateUser(string fullName, string email, string password, UserRole role)
+        public async Task<CreateUserResult> CreateUserDetailed(string fullName, string email, string password, UserRole role)
         {
             try
             {
-                // Check if user already exists
-                var existingUser = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == email);
+                if (string.IsNullOrWhiteSpace(fullName))
+                    return new CreateUserResult { Success = false, Message = "Full name is required." };
 
+                if (string.IsNullOrWhiteSpace(email))
+                    return new CreateUserResult { Success = false, Message = "Email is required." };
+
+                if (string.IsNullOrWhiteSpace(password) || password.Trim().Length < 6)
+                    return new CreateUserResult { Success = false, Message = "Password must be at least 6 characters." };
+
+                var normalizedEmail = email.Trim().ToLowerInvariant();
+                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
                 if (existingUser != null)
                 {
-                    Console.WriteLine("User with this email already exists");
-                    return null;
+                    if (!existingUser.IsActive)
+                    {
+                        existingUser.FullName = fullName.Trim();
+                        existingUser.PasswordHash = _authService.HashPassword(password);
+                        existingUser.Role = role;
+                        existingUser.IsActive = true;
+                        existingUser.IsLockedOut = false;
+                        existingUser.FailedLoginAttempts = 0;
+                        existingUser.LockoutUntil = null;
+
+                        _context.Users.Update(existingUser);
+                        await _context.SaveChangesAsync();
+
+                        return new CreateUserResult
+                        {
+                            Success = true,
+                            Message = "Existing inactive user reactivated successfully.",
+                            User = existingUser
+                        };
+                    }
+
+                    return new CreateUserResult { Success = false, Message = "A user with this email already exists." };
                 }
+
+                var passwordHash = _authService.HashPassword(password);
+                if (string.IsNullOrWhiteSpace(passwordHash))
+                    return new CreateUserResult { Success = false, Message = "Failed to hash password." };
 
                 var user = new User
                 {
-                    FullName = fullName,
-                    Email = email,
-                    PasswordHash = _authService.HashPassword(password),
+                    FullName = fullName.Trim(),
+                    Email = normalizedEmail,
+                    PasswordHash = passwordHash,
                     Role = role,
                     CreatedAt = DateTime.UtcNow,
-                    IsActive = true
+                    IsActive = true,
+                    FailedLoginAttempts = 0,
+                    IsLockedOut = false,
+                    LockoutUntil = null
                 };
 
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
-                return user;
+
+                return new CreateUserResult
+                {
+                    Success = true,
+                    Message = "User created successfully.",
+                    User = user
+                };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Create user error: {ex.Message}");
-                return null;
+                Console.WriteLine($"Create user error: {ex}");
+                return new CreateUserResult
+                {
+                    Success = false,
+                    Message = "Unable to create user right now. Please try again."
+                };
             }
         }
 
-        /// <summary>
-        /// Updates user details
-        /// </summary>
+        public async Task<User?> CreateUser(string fullName, string email, string password, UserRole role)
+        {
+            var result = await CreateUserDetailed(fullName, email, password, role);
+            return result.User;
+        }
+
         public async Task<bool> UpdateUser(int id, string fullName, string email, string? expertise = null)
         {
             try
@@ -99,7 +150,6 @@ namespace FYP_AutomationSystem.Services
                 if (user == null)
                     return false;
 
-                // Check if email is unique (excluding current user)
                 var existingEmail = await _context.Users
                     .FirstOrDefaultAsync(u => u.Email == email && u.Id != id);
 
@@ -122,32 +172,112 @@ namespace FYP_AutomationSystem.Services
             }
         }
 
-        /// <summary>
-        /// Deactivates a user (soft delete)
-        /// </summary>
         public async Task<bool> DeactivateUser(int id)
+        {
+            var result = await DeleteUserDetailed(id);
+            return result.Success;
+        }
+
+        public async Task<DeleteUserResult> DeleteUserDetailed(int id)
         {
             try
             {
                 var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
                 if (user == null)
-                    return false;
+                    return new DeleteUserResult { Success = false, Message = "User not found." };
 
-                user.IsActive = false;
-                _context.Users.Update(user);
+                if (user.Role == UserRole.Admin)
+                {
+                    var activeAdmins = await _context.Users.CountAsync(u => u.Role == UserRole.Admin && u.IsActive);
+                    if (activeAdmins <= 1)
+                    {
+                        return new DeleteUserResult { Success = false, Message = "Cannot delete the last active admin." };
+                    }
+                }
+
+                if (user.Role == UserRole.Supervisor)
+                {
+                    var assignedGroups = await _context.Groups.CountAsync(g => g.SupervisorId == user.Id);
+                    if (assignedGroups > 0)
+                    {
+                        return new DeleteUserResult
+                        {
+                            Success = false,
+                            Message = $"Cannot delete supervisor. Reassign or remove {assignedGroups} assigned group(s) first."
+                        };
+                    }
+                }
+
+                var groupsWithLead = await _context.Groups.Where(g => g.GroupLeadId == user.Id).ToListAsync();
+                foreach (var g in groupsWithLead)
+                {
+                    g.GroupLeadId = null;
+                }
+
+                var groupsWithMember = await _context.Groups
+                    .Include(g => g.Members)
+                    .Where(g => g.Members.Any(m => m.Id == user.Id))
+                    .ToListAsync();
+
+                foreach (var g in groupsWithMember)
+                {
+                    var member = g.Members.FirstOrDefault(m => m.Id == user.Id);
+                    if (member != null)
+                    {
+                        g.Members.Remove(member);
+                    }
+                }
+
+                var vivaSlots = await _context.VivaSlots
+                    .Include(v => v.PanelMembers)
+                    .Where(v => v.PanelMembers.Any(p => p.Id == user.Id))
+                    .ToListAsync();
+
+                foreach (var slot in vivaSlots)
+                {
+                    var panelMember = slot.PanelMembers.FirstOrDefault(p => p.Id == user.Id);
+                    if (panelMember != null)
+                    {
+                        slot.PanelMembers.Remove(panelMember);
+                    }
+                }
+
+                var notifications = await _context.Notifications.Where(n => n.RecipientId == user.Id).ToListAsync();
+                if (notifications.Count > 0)
+                {
+                    _context.Notifications.RemoveRange(notifications);
+                }
+
+                var directMessages = await _context.Messages
+                    .Where(m => m.SenderId == user.Id || m.RecipientId == user.Id)
+                    .ToListAsync();
+                if (directMessages.Count > 0)
+                {
+                    _context.Messages.RemoveRange(directMessages);
+                }
+
+                var evaluations = await _context.Evaluations.Where(e => e.EvaluatorId == user.Id).ToListAsync();
+                if (evaluations.Count > 0)
+                {
+                    _context.Evaluations.RemoveRange(evaluations);
+                }
+
+                _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
-                return true;
+
+                return new DeleteUserResult { Success = true, Message = "User deleted successfully." };
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Deactivate user error: {ex.Message}");
-                return false;
+                return new DeleteUserResult
+                {
+                    Success = false,
+                    Message = "Unable to delete user due to linked records. Reassign dependencies and try again."
+                };
             }
         }
 
-        /// <summary>
-        /// Retrieves users by role
-        /// </summary>
         public async Task<List<User>> GetUsersByRole(UserRole role)
         {
             try
@@ -163,9 +293,6 @@ namespace FYP_AutomationSystem.Services
             }
         }
 
-        /// <summary>
-        /// Changes user password
-        /// </summary>
         public async Task<bool> ChangePassword(int id, string newPassword)
         {
             try

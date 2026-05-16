@@ -2,13 +2,31 @@
 @attribute [Authorize(Roles = "Student")]
 @inject AppDbContext Db
 @inject MilestoneService MilestoneService
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
-  <div><h1>My Milestones</h1><div class="page-subtitle">Track and update your project milestones.</div></div>
+  <div><h1>My Milestones</h1><div class="page-subtitle">Google Classroom-style milestone board for your group.</div></div>
 </div>
 
-@if (_loading) { <LoadingSpinner /> }
-else if (_project == null) { <div class="empty-state"><i class="bi bi-inbox"></i>You are not assigned to a project yet.</div> }
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
+}
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+
+@if (_loading)
+{
+  <LoadingSpinner />
+}
+else if (_project == null)
+{
+  <div class="empty-state"><i class="bi bi-inbox"></i>You are not assigned to a project yet.</div>
+}
 else
 {
   <div class="fcard mb-3">
@@ -20,27 +38,61 @@ else
   </div>
 
   <div class="fcard">
-    <div class="fcard-title"><i class="bi bi-flag"></i> Milestones</div>
-    <div class="timeline">
+    <div class="fcard-title"><i class="bi bi-flag"></i> Assigned Milestones</div>
+    @if (!_milestones.Any())
+    {
+      <div class="text-muted small">No milestones assigned yet.</div>
+    }
+    else
+    {
       @foreach (var m in _milestones.OrderBy(m => m.DueDate))
       {
+        var overdue = DateTime.UtcNow > m.DueDate;
+        var submitted = m.SubmittedAt.HasValue;
         <div class="timeline-item @StatusClass(m.Status)">
           <div class="d-flex justify-content-between align-items-start">
             <div>
               <div class="fw-semibold">@m.Title</div>
               <div class="small text-muted">@m.Description</div>
-              <div class="small text-muted">Due @m.DueDate.ToString("MMM dd, yyyy")</div>
+              <div class="small text-muted">Due @m.DueDate.ToLocalTime().ToString("MMM dd, yyyy HH:mm")</div>
+              @if (overdue && !submitted)
+              {
+                <div class="small text-danger fw-semibold">Submission closed (deadline passed)</div>
+              }
             </div>
             <span class="fbadge @StatusClass(m.Status)">@m.Status</span>
           </div>
-          <div class="mt-2 d-flex align-items-center gap-2">
-            <input type="range" class="form-range flex-grow-1" min="0" max="100" step="5"
-              value="@m.ProgressPercent" @onchange="@(e => UpdateProgress(m, e))" />
-            <span class="small fw-semibold" style="min-width:40px;text-align:right">@m.ProgressPercent%</span>
-          </div>
+
+          @if (submitted)
+          {
+            <div class="mt-2 border-top pt-2">
+              <div class="small text-success">Submitted on @m.SubmittedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+              @if (!string.IsNullOrWhiteSpace(m.SubmissionFilePath))
+              {
+                <div class="small"><a href="@m.SubmissionFilePath" target="_blank">Open Uploaded File</a></div>
+              }
+              @if (!string.IsNullOrWhiteSpace(m.SubmissionNotes))
+              {
+                <div class="small text-muted">Notes: @m.SubmissionNotes</div>
+              }
+            </div>
+          }
+          else
+          {
+            <div class="mt-3 border-top pt-2">
+              <div class="small text-uppercase text-muted mb-2">Submit Milestone</div>
+              <textarea class="form-control mb-2" rows="2" placeholder="Submission notes (optional)" @bind="_submissionNotes[m.Id]"></textarea>
+              <InputFile class="form-control mb-2" OnChange="e => OnMilestoneFileSelected(m.Id, e)" accept=".pdf,.doc,.docx,.zip" />
+              @if (_submissionFileNames.TryGetValue(m.Id, out var selectedName) && !string.IsNullOrWhiteSpace(selectedName))
+              {
+                <div class="small text-muted mb-2">Selected: @selectedName</div>
+              }
+              <button class="btn btn-sm btn-success" disabled="@(overdue || !_submissionFiles.ContainsKey(m.Id))" @onclick="() => SubmitMilestone(m)">Submit Milestone</button>
+            </div>
+          }
         </div>
       }
-    </div>
+    }
   </div>
 }
 
@@ -49,32 +101,105 @@ else
   private Project? _project;
   private List<Milestone> _milestones = new();
   private int _overall;
+  private string? _msg;
+  private string? _error;
+  private int _studentId;
+
+  private readonly Dictionary<int, IBrowserFile> _submissionFiles = new();
+  private readonly Dictionary<int, string> _submissionFileNames = new();
+  private readonly Dictionary<int, string> _submissionNotes = new();
 
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    var grp = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Project), g => g.Members.Any(m => m.Id == u.Id));
+    await Load();
+  }
+
+  private async Task Load()
+  {
+    _loading = true;
+    _msg = null;
+    _error = null;
+
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _studentId = int.TryParse(id, out var userId) ? userId : 0;
+    if (_studentId <= 0)
+    {
+      _error = "Unable to resolve current student.";
+      _loading = false;
+      return;
+    }
+
+    var grp = await Db.Groups
+      .Include(g => g.Members)
+      .Include(g => g.Project)
+      .FirstOrDefaultAsync(g => g.Members.Any(m => m.Id == _studentId));
+
     _project = grp?.Project;
+
     if (_project != null)
     {
       _milestones = await MilestoneService.GetMilestonesByProjectAsync(_project.Id);
       Recalc();
     }
+    else
+    {
+      _milestones = new List<Milestone>();
+      _overall = 0;
+    }
+
+    foreach (var m in _milestones)
+    {
+      if (!_submissionNotes.ContainsKey(m.Id))
+      {
+        _submissionNotes[m.Id] = string.Empty;
+      }
+    }
+
     _loading = false;
   }
 
-  private async Task UpdateProgress(Milestone m, ChangeEventArgs e)
+  private async Task OnMilestoneFileSelected(int milestoneId, InputFileChangeEventArgs e)
   {
-    if (int.TryParse(e.Value?.ToString(), out var v))
+    var file = e.File;
+    if (file == null)
+      return;
+
+    _submissionFiles[milestoneId] = file;
+    _submissionFileNames[milestoneId] = file.Name;
+    await Task.CompletedTask;
+  }
+
+  private async Task SubmitMilestone(Milestone milestone)
+  {
+    _msg = null;
+    _error = null;
+
+    if (!_submissionFiles.TryGetValue(milestone.Id, out var file))
     {
-      m.ProgressPercent = v;
-      if (v >= 100) m.Status = MilestoneStatus.Completed;
-      else if (v > 0) m.Status = MilestoneStatus.InProgress;
-      else m.Status = MilestoneStatus.Pending;
-      await MilestoneService.UpdateMilestoneAsync(m);
-      Recalc();
+      _error = "Please attach a file before submitting.";
+      return;
     }
+
+    if (DateTime.UtcNow > milestone.DueDate)
+    {
+      _error = "Deadline has passed. You cannot submit this milestone now.";
+      return;
+    }
+
+    var notes = _submissionNotes.GetValueOrDefault(milestone.Id, string.Empty);
+    var result = await MilestoneService.SubmitMilestoneByStudentAsync(_studentId, milestone.Id, notes, file);
+    if (!result.Success)
+    {
+      _error = result.Message;
+      return;
+    }
+
+    _msg = result.Message;
+    _submissionFiles.Remove(milestone.Id);
+    _submissionFileNames.Remove(milestone.Id);
+    _submissionNotes[milestone.Id] = string.Empty;
+    await Load();
   }
 
   private void Recalc() => _overall = _milestones.Count == 0 ? 0 : (int)_milestones.Average(m => m.ProgressPercent);
@@ -86,4 +211,5 @@ else
     MilestoneStatus.Overdue => "overdue",
     _ => "pending"
   };
+
 }

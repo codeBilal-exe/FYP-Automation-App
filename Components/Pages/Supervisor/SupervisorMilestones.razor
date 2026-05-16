@@ -1,0 +1,365 @@
+@page "/supervisor/milestones"
+@attribute [Authorize(Roles = "Supervisor")]
+@inject AppDbContext Db
+@inject MilestoneService MilestoneService
+@inject ProjectThreadService ProjectThreadService
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>Assign Milestones</h1><div class="page-subtitle">Select a group, assign milestone work, edit deadlines, and track submissions.</div></div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
+}
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+
+@if (!_groups.Any())
+{
+  <div class="empty-state"><i class="bi bi-diagram-3"></i>No groups assigned.</div>
+}
+else
+{
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="fcard">
+        <div class="fcard-title"><i class="bi bi-people"></i> Groups</div>
+        @foreach (var g in _groups)
+        {
+          var stats = GetStats(g);
+          var selected = _selectedGroup?.Id == g.Id;
+          <button type="button" class="w-100 text-start border-0 mb-2 group-card @(selected ? "group-card-active" : "")" @onclick="() => SelectGroup(g.Id)">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">@g.GroupName</div>
+                <div class="small text-muted">@(g.Project?.Title ?? "No project")</div>
+              </div>
+              <span class="fbadge info">@stats.Progress% complete</span>
+            </div>
+            <div class="small text-muted mt-1">Thread: @(_threads.Contains(g.Id) ? "Created" : "Not Created")</div>
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      @if (_selectedGroup == null)
+      {
+        <div class="fcard"><div class="empty-state"><i class="bi bi-cursor"></i>Select a group card to manage milestones.</div></div>
+      }
+      else
+      {
+        <div class="fcard mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <h5 class="mb-0">@_selectedGroup.GroupName</h5>
+              <div class="small text-muted">@(CurrentProject?.Title ?? "No project yet")</div>
+            </div>
+            <div>
+              @if (!_threads.Contains(_selectedGroup.Id))
+              {
+                <button type="button" class="btn btn-primary" @onclick="CreateThreadForSelectedGroup">Create Thread</button>
+              }
+              else
+              {
+                <a class="btn btn-sm btn-soft" href="@($"/project/thread/{_selectedGroup.Id}")">Open Thread</a>
+              }
+            </div>
+          </div>
+
+          <div class="border rounded p-3">
+            <div class="small text-uppercase text-muted mb-2">Assign New Milestone</div>
+            <div class="row g-2">
+              <div class="col-md-6"><label class="form-label">Title</label><input class="form-control" @bind="_form.Title" /></div>
+              <div class="col-md-6"><label class="form-label">Deadline</label><input class="form-control" type="datetime-local" @bind-value="_form.Deadline" @bind-value:format="yyyy-MM-ddTHH:mm" /></div>
+              <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" rows="3" @bind="_form.Description"></textarea></div>
+              <div class="col-12 d-flex justify-content-end"><button type="button" class="btn btn-success" @onclick="AssignMilestone">Assign to Group</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fcard">
+          <div class="fcard-title"><i class="bi bi-flag"></i> Milestones</div>
+          @if (!_selectedMilestones.Any())
+          {
+            <div class="text-muted small">No milestones assigned yet.</div>
+          }
+          else
+          {
+            @foreach (var m in _selectedMilestones.OrderBy(x => x.DueDate))
+            {
+              var isEditing = _editMilestoneId == m.Id;
+              <div class="border rounded p-3 mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-semibold">@m.Title</div>
+                    <div class="small text-muted">@m.Description</div>
+                    <div class="small text-muted">Due: @m.DueDate.ToString("yyyy-MM-dd HH:mm")</div>
+                    @if (m.SubmittedAt.HasValue)
+                    {
+                    <div class="fw-semibold text-success">Submitted: @m.SubmittedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                    @if (!string.IsNullOrWhiteSpace(m.SubmissionFilePath))
+                    {
+                        <div class="mt-2"><a class="btn btn-primary" href="@m.SubmissionFilePath" target="_blank">Open Submission</a></div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(m.SubmissionNotes))
+                    {
+                        <div class="text-muted mt-2"><strong>Notes:</strong> @m.SubmissionNotes</div>
+                    }
+                    }
+                  </div>
+                  <div class="text-end">
+                    <span class="fbadge @StatusClass(m.Status)">@m.Status</span>
+                    <div class="small mt-1">@m.ProgressPercent%</div>
+                  </div>
+                </div>
+
+                <div class="mt-2">
+                  @if (!isEditing)
+                  {
+                    <button type="button" class="btn btn-light" @onclick="() => StartEditDeadline(m)">Edit Deadline</button>
+                  }
+                  else
+                  {
+                    <div class="d-flex align-items-center gap-2">
+                      <input class="form-control form-control-sm" type="datetime-local" @bind-value="_editDeadline" @bind-value:format="yyyy-MM-ddTHH:mm" style="max-width:240px" />
+                      <button type="button" class="btn btn-primary" @onclick="() => SaveDeadline(m.Id)">Save</button>
+                      <button type="button" class="btn btn-light" @onclick="CancelEditDeadline">Cancel</button>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
+  </div>
+}
+
+@code {
+  private List<Group> _groups = new();
+  private HashSet<int> _threads = new();
+  private Dictionary<int, int> _groupProgress = new();
+  private string? _msg;
+  private string? _error;
+  private int _supervisorId;
+  private int? _selectedGroupId;
+  private Group? _selectedGroup;
+  private Project? CurrentProject;
+  private List<Milestone> _selectedMilestones = new();
+
+  private MilestoneForm _form = new();
+  private int? _editMilestoneId;
+  private DateTime _editDeadline = DateTime.UtcNow.AddDays(7);
+
+  private sealed class MilestoneForm
+  {
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public DateTime Deadline { get; set; } = DateTime.UtcNow.AddDays(7);
+  }
+
+  private sealed class GroupStats
+  {
+    public int Progress { get; set; }
+  }
+
+  protected override async Task OnInitializedAsync()
+  {
+    await Load();
+  }
+
+  private async Task Load()
+  {
+    _msg = null;
+    _error = null;
+
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _supervisorId = int.TryParse(id, out var userId) ? userId : 0;
+    if (_supervisorId <= 0)
+    {
+      _error = "Unable to resolve current supervisor.";
+      return;
+    }
+
+    _groups = await Db.Groups
+      .Include(g => g.Project)
+      .Include(g => g.Members)
+      .Where(g => g.SupervisorId == _supervisorId)
+      .OrderBy(g => g.GroupName)
+      .ToListAsync();
+
+    var groupIds = _groups.Select(g => g.Id).ToList();
+    _threads = (await Db.ProjectThreads
+      .Where(t => groupIds.Contains(t.GroupId))
+      .Select(t => t.GroupId)
+      .ToListAsync()).ToHashSet();
+
+    _groupProgress.Clear();
+    var projectIds = _groups.Where(g => g.Project != null).Select(g => g.Project!.Id).ToList();
+    var allMilestones = await Db.Milestones.Where(m => projectIds.Contains(m.ProjectId)).ToListAsync();
+    foreach (var group in _groups)
+    {
+      if (group.Project == null)
+      {
+        _groupProgress[group.Id] = 0;
+        continue;
+      }
+
+      var ms = allMilestones.Where(m => m.ProjectId == group.Project.Id).ToList();
+      _groupProgress[group.Id] = ms.Count == 0 ? 0 : (int)ms.Average(m => m.ProgressPercent);
+    }
+
+    if (_selectedGroupId == null && _groups.Any())
+    {
+      _selectedGroupId = _groups.First().Id;
+    }
+
+    await LoadSelectedGroupDetails();
+  }
+
+  private GroupStats GetStats(Group group)
+  {
+    return new GroupStats { Progress = _groupProgress.GetValueOrDefault(group.Id, 0) };
+  }
+
+  private async Task SelectGroup(int groupId)
+  {
+    _selectedGroupId = groupId;
+    _editMilestoneId = null;
+    await LoadSelectedGroupDetails();
+  }
+
+  private async Task LoadSelectedGroupDetails()
+  {
+    _selectedGroup = _groups.FirstOrDefault(g => g.Id == _selectedGroupId);
+    if (_selectedGroup == null)
+    {
+      CurrentProject = null;
+      _selectedMilestones = new List<Milestone>();
+      return;
+    }
+
+    CurrentProject = await Db.Projects.FirstOrDefaultAsync(p => p.GroupId == _selectedGroup.Id);
+    if (CurrentProject == null)
+    {
+      _selectedMilestones = new List<Milestone>();
+      return;
+    }
+
+    _selectedMilestones = await MilestoneService.GetMilestonesByProjectAsync(CurrentProject.Id);
+  }
+
+  private async Task AssignMilestone()
+  {
+    _msg = null;
+    _error = null;
+    if (_selectedGroup == null)
+    {
+      _error = "Please select a group.";
+      return;
+    }
+
+    var result = await MilestoneService.CreateMilestoneForGroupAsync(
+      _supervisorId,
+      _selectedGroup.Id,
+      _form.Title,
+      _form.Description,
+      _form.Deadline.ToUniversalTime());
+
+    if (!result.Success)
+    {
+      _error = result.Message;
+      return;
+    }
+
+    _msg = result.Message;
+    _form = new MilestoneForm();
+    await Load();
+  }
+
+  private void StartEditDeadline(Milestone milestone)
+  {
+    _editMilestoneId = milestone.Id;
+    _editDeadline = milestone.DueDate.ToLocalTime();
+  }
+
+  private void CancelEditDeadline()
+  {
+    _editMilestoneId = null;
+  }
+
+  private async Task SaveDeadline(int milestoneId)
+  {
+    _msg = null;
+    _error = null;
+
+    var result = await MilestoneService.UpdateMilestoneDeadlineAsync(_supervisorId, milestoneId, _editDeadline.ToUniversalTime());
+    if (!result.Success)
+    {
+      _error = result.Message;
+      return;
+    }
+
+    _editMilestoneId = null;
+    _msg = result.Message;
+    await Load();
+  }
+
+  private async Task CreateThreadForSelectedGroup()
+  {
+    _msg = null;
+    _error = null;
+
+    if (_selectedGroup == null)
+    {
+      _error = "Please select a group.";
+      return;
+    }
+
+    var created = await ProjectThreadService.EnsureThreadForGroupAsync(_selectedGroup.Id, 120);
+    if (created == null)
+    {
+      _error = "Unable to create project thread.";
+      return;
+    }
+
+    _msg = $"Project thread created for {_selectedGroup.GroupName}.";
+    await Load();
+  }
+
+  private static string StatusClass(MilestoneStatus s) => s switch
+  {
+    MilestoneStatus.Completed => "completed",
+    MilestoneStatus.InProgress => "active",
+    MilestoneStatus.Overdue => "overdue",
+    _ => "pending"
+  };
+}
+
+<style>
+.group-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.group-card:hover {
+  background: #f8fafc;
+}
+.group-card:focus,
+.group-card:focus-visible {
+  outline: none;
+}
+.group-card-active {
+  outline: 2px solid var(--primary);
+  background: #eef2ff;
+}
+</style>

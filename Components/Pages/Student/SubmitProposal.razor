@@ -3,38 +3,83 @@
 @inject AppDbContext Db
 @inject ProposalService ProposalService
 @inject AuditService AuditService
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
   <div>
     <h1>Submit Proposal</h1>
-    <div class="page-subtitle">Submit and track your project proposal.</div>
+    <div class="page-subtitle">Save drafts, attach your document, and track approval status by group.</div>
   </div>
 </div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
+}
 
 <div class="row g-3">
   <div class="col-lg-7">
     <div class="fcard">
-      <div class="fcard-title"><i class="bi bi-file-earmark-plus"></i> New Proposal</div>
-      <EditForm Model="_model" OnValidSubmit="Submit" FormName="proposal-form">
+      <div class="fcard-title"><i class="bi bi-file-earmark-plus"></i> Proposal Form</div>
+      <EditForm Model="_model" OnValidSubmit="Submit" OnInvalidSubmit="OnInvalidSubmit" FormName="proposal-form">
         <DataAnnotationsValidator />
-        <div class="mb-3"><label class="form-label">Title</label><InputText class="form-control" @bind-Value="_model.Title" /></div>
+        <ValidationSummary />
+        <div class="mb-3"><label class="form-label">Project Title</label><InputText class="form-control" @bind-Value="_model.Title" /></div>
         <div class="mb-3"><label class="form-label">Abstract</label><InputTextArea rows="4" class="form-control" @bind-Value="_model.Abstract" /></div>
         <div class="mb-3"><label class="form-label">Objectives</label><InputTextArea rows="4" class="form-control" @bind-Value="_model.Objectives" /></div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-light" type="button" @onclick="() => SaveAs(ProposalStatus.Draft)">Save as Draft</button>
-          <button class="btn btn-primary" type="submit">Submit to Supervisor</button>
+        <div class="mb-3"><label class="form-label">Domain</label><InputText class="form-control" @bind-Value="_model.Domain" /></div>
+        <div class="mb-3"><label class="form-label">Technologies</label><InputTextArea rows="2" class="form-control" @bind-Value="_model.Technologies" /></div>
+        <div class="mb-3"><label class="form-label">GitHub Repository URL</label><InputText class="form-control" @bind-Value="_model.GitHubUrl" /></div>
+
+        <div class="mb-3">
+          <label class="form-label">Attach Proposal Document (PDF or Word, max 10 MB)</label>
+          <InputFile OnChange="OnFileSelected" accept=".pdf,.doc,.docx" class="form-control" />
+          @if (!string.IsNullOrWhiteSpace(_selectedFileName))
+          {
+            <div class="small text-muted mt-1">Selected: @_selectedFileName</div>
+          }
+          @if (!string.IsNullOrWhiteSpace(_existingDocumentName) && string.IsNullOrWhiteSpace(_selectedFileName))
+          {
+            <div class="small mt-1">Current: <a href="@_existingDocumentPath" target="_blank">@_existingDocumentName</a></div>
+          }
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-light" type="button" @onclick="SaveDraft">Save as Draft</button>
+          <button class="btn btn-primary" type="submit" disabled="@_saving">
+            @if (_saving)
+            {
+              <span>Submitting...</span>
+            }
+            else
+            {
+              <span>Submit to Supervisor</span>
+            }
+          </button>
+          <button class="btn btn-outline-danger" type="button" @onclick="() => _showDiscardConfirm = true">Discard Draft</button>
         </div>
       </EditForm>
-      @if (!string.IsNullOrEmpty(_msg)) { <div class="alert alert-success mt-3 mb-0">@_msg</div> }
+
+      @if (_latestStatus == ProposalStatus.Draft)
+      {
+        <div class="alert alert-warning mt-3 mb-0">Draft Saved - Not Yet Submitted</div>
+      }
     </div>
   </div>
+
   <div class="col-lg-5">
     <div class="fcard">
       <div class="fcard-title"><i class="bi bi-bar-chart-steps"></i> Approval Workflow</div>
       <div class="timeline">
         @foreach (var step in _steps)
         {
-          var done = StatusOrder(_currentStatus) >= step.Order;
+          var done = StatusOrder(_latestStatus) >= step.Order;
           var cls = done ? "completed" : "pending";
           <div class="timeline-item @cls">
             <div class="fw-semibold">@step.Label</div>
@@ -45,8 +90,11 @@
     </div>
 
     <div class="fcard mt-3">
-      <div class="fcard-title"><i class="bi bi-clock-history"></i> My Proposals</div>
-      @if (!_existing.Any()) { <div class="text-muted small">No proposals yet.</div> }
+      <div class="fcard-title"><i class="bi bi-clock-history"></i> Group Proposal History</div>
+      @if (!_existing.Any())
+      {
+        <div class="text-muted small">No proposals yet.</div>
+      }
       else
       {
         @foreach (var p in _existing)
@@ -56,8 +104,11 @@
               <strong>@p.Title</strong>
               <span class="fbadge @StatusClass(p.Status)">@p.Status</span>
             </div>
-            <div class="small text-muted">@p.SubmittedAt.ToString("MMM dd, yyyy")</div>
-            @if (!string.IsNullOrEmpty(p.RejectionReason)) { <div class="small text-danger">Reason: @p.RejectionReason</div> }
+            <div class="small text-muted">@p.SubmittedAt.ToString("MMM dd, yyyy HH:mm")</div>
+            @if (!string.IsNullOrEmpty(p.RejectionReason))
+            {
+              <div class="small text-danger">Reason: @p.RejectionReason</div>
+            }
           </div>
         }
       }
@@ -65,68 +116,275 @@
   </div>
 </div>
 
+@if (_showDiscardConfirm)
+{
+  <div class="modal-backdrop-c" @onclick="() => _showDiscardConfirm = false">
+    <div class="modal-card" @onclick:stopPropagation>
+      <h5>Discard Draft</h5>
+      <p class="text-muted">This will remove your current draft proposal. Continue?</p>
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-light" @onclick="() => _showDiscardConfirm = false">Cancel</button>
+        <button class="btn btn-danger" @onclick="DiscardDraft">Discard</button>
+      </div>
+    </div>
+  </div>
+}
+
 @code {
   private record Step(int Order, string Label);
-  private List<Step> _steps = new()
+  private readonly List<Step> _steps = new()
   {
-    new(1,"Submitted"), new(2,"Supervisor"), new(3,"Coordinator"), new(4,"HOD")
+    new(1,"Submitted"),
+    new(2,"Supervisor Approved"),
+    new(3,"HOD Approved"),
+    new(4,"Coordinator Approved")
   };
+
   private ProposalModel _model = new();
   private List<Proposal> _existing = new();
   private string? _msg;
-  private ProposalStatus _currentStatus = ProposalStatus.Draft;
+  private string? _error;
+  private ProposalStatus _latestStatus = ProposalStatus.Draft;
+  private int _groupId;
+  private IBrowserFile? _selectedFile;
+  private string? _selectedFileName;
+  private string? _existingDocumentPath;
+  private string? _existingDocumentName;
+  private bool _showDiscardConfirm;
+  private CancellationTokenSource _pollCts = new();
+  private bool _saving;
 
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    _existing = await ProposalService.GetProposalsByStudentAsync(u.Id);
-    if (_existing.Any()) _currentStatus = _existing.OrderByDescending(p => p.SubmittedAt).First().Status;
+    await LoadForCurrentStudent();
+    _ = PollForStatusChanges(_pollCts.Token);
   }
 
-  private async Task Submit() => await SaveAs(ProposalStatus.SubmittedToSupervisor);
+  private async Task LoadForCurrentStudent()
+  {
+    _msg = null;
+    _error = null;
+
+    var userId = await GetCurrentUserId();
+    if (userId <= 0)
+    {
+      return;
+    }
+
+    _groupId = await Db.Groups
+      .Where(g => g.Members.Any(m => m.Id == userId))
+      .Select(g => g.Id)
+      .FirstOrDefaultAsync();
+
+    if (_groupId <= 0)
+    {
+      _error = "You must be in a group before submitting a proposal.";
+      return;
+    }
+
+    _existing = await ProposalService.GetProposalsByStudentAsync(userId);
+    var latest = _existing.OrderByDescending(p => p.SubmittedAt).ThenByDescending(p => p.UpdatedAt).FirstOrDefault();
+    if (latest != null)
+    {
+      _latestStatus = latest.Status;
+      _existingDocumentPath = latest.DocumentPath;
+      _existingDocumentName = latest.DocumentName;
+      if (latest.Status == ProposalStatus.Draft)
+      {
+        _model = new ProposalModel
+        {
+          Title = latest.Title,
+          Abstract = latest.Abstract,
+          Objectives = latest.Objectives,
+          Domain = latest.Domain,
+          Technologies = latest.Technologies,
+          GitHubUrl = latest.GitHubUrl
+        };
+      }
+    }
+  }
+
+  private async Task SaveDraft() => await SaveAs(ProposalStatus.Draft);
+
+  private async Task Submit() => await SaveAs(ProposalStatus.Submitted);
 
   private async Task SaveAs(ProposalStatus status)
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    var group = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members), g => g.Members.Any(m => m.Id == u.Id));
-    var p = new Proposal {
-      Title = _model.Title, Abstract = _model.Abstract, Objectives = _model.Objectives,
-      Status = status, StudentId = u.Id, GroupId = group?.Id ?? 0, SubmittedAt = DateTime.UtcNow
-    };
-    await ProposalService.CreateProposalAsync(p);
-    await AuditService.LogActionAsync(u.Id, "ProposalSubmit", $"Status={status}, Title={_model.Title}");
-    _msg = status == ProposalStatus.Draft ? "Saved as draft." : "Submitted for review.";
+    if (_saving) return;
+    _saving = true;
+    _msg = null;
+    _error = null;
+
+    try
+    {
+      var userId = await GetCurrentUserId();
+      if (userId <= 0)
+      {
+        _error = "Unable to identify current user.";
+        return;
+      }
+
+      if (_groupId <= 0)
+      {
+        _error = "You must be in a group before saving/submitting a proposal.";
+        return;
+      }
+
+      var payload = new Proposal
+      {
+        GroupId = _groupId,
+        Title = _model.Title,
+        Abstract = _model.Abstract,
+        Objectives = _model.Objectives,
+        Domain = _model.Domain,
+        Technologies = _model.Technologies,
+        GitHubUrl = _model.GitHubUrl,
+        DocumentPath = _existingDocumentPath,
+        DocumentName = _existingDocumentName,
+        DocumentUploadedAt = _existingDocumentPath != null ? DateTime.UtcNow : null
+      };
+
+      if (_selectedFile != null)
+      {
+        var upload = await ProposalService.SaveProposalDocumentAsync(_selectedFile);
+        if (!upload.Success)
+        {
+          _error = upload.Message;
+          return;
+        }
+
+        payload.DocumentPath = upload.SavedPath;
+        payload.DocumentName = upload.SavedName;
+        payload.DocumentUploadedAt = DateTime.UtcNow;
+        _existingDocumentPath = upload.SavedPath;
+        _existingDocumentName = upload.SavedName;
+      }
+
+      var result = await ProposalService.SaveOrSubmitGroupProposalAsync(userId, payload, status);
+      if (!result.Success)
+      {
+        _error = result.Message;
+        return;
+      }
+
+      await AuditService.LogActionAsync(userId, "PROPOSAL_SAVE", $"Status={status}, Group={_groupId}, Title={_model.Title}");
+      _msg = result.Message;
+      _latestStatus = status;
+      _selectedFile = null;
+      _selectedFileName = null;
+
+      if (status != ProposalStatus.Draft)
+      {
+        _model = new();
+      }
+
+      await LoadForCurrentStudent();
+    }
+    catch (Exception ex)
+    {
+      _error = $"Failed to submit proposal: {ex.Message}";
+    }
+    finally
+    {
+      _saving = false;
+    }
+  }
+
+  private void OnInvalidSubmit(EditContext _)
+  {
+    _error = "Please fix the validation errors and try again.";
+  }
+
+  private async Task OnFileSelected(InputFileChangeEventArgs e)
+  {
+    _selectedFile = e.File;
+    _selectedFileName = _selectedFile?.Name;
+    _error = null;
+  }
+
+  private async Task DiscardDraft()
+  {
+    _showDiscardConfirm = false;
+    _msg = null;
+    _error = null;
+
+    if (_groupId <= 0)
+    {
+      _error = "Group not found.";
+      return;
+    }
+
+    var discarded = await ProposalService.DiscardDraftAsync(_groupId);
+    if (!discarded)
+    {
+      _error = "Unable to discard draft.";
+      return;
+    }
+
     _model = new();
-    _existing = await ProposalService.GetProposalsByStudentAsync(u.Id);
-    _currentStatus = status;
+    _selectedFile = null;
+    _selectedFileName = null;
+    _msg = "Draft discarded.";
+    await LoadForCurrentStudent();
+  }
+
+  private async Task PollForStatusChanges(CancellationToken token)
+  {
+    using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
+    try
+    {
+      while (await timer.WaitForNextTickAsync(token))
+      {
+        await InvokeAsync(LoadForCurrentStudent);
+        await InvokeAsync(StateHasChanged);
+      }
+    }
+    catch (OperationCanceledException)
+    {
+    }
+  }
+
+  private async Task<int> GetCurrentUserId()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    return int.TryParse(id, out var userId) ? userId : 0;
   }
 
   private static int StatusOrder(ProposalStatus s) => s switch
   {
     ProposalStatus.Draft => 0,
-    ProposalStatus.SubmittedToSupervisor => 1,
-    ProposalStatus.ApprovedBySupervisor => 2,
-    ProposalStatus.ApprovedByCoordinator => 3,
-    ProposalStatus.PendingHOD => 4,
-    ProposalStatus.ApprovedByHOD => 5,
-    ProposalStatus.ApprovedActive => 6,
+    ProposalStatus.Submitted => 1,
+    ProposalStatus.SupervisorApproved => 2,
+    ProposalStatus.HODApproved => 3,
+    ProposalStatus.CoordinatorApproved => 4,
+    ProposalStatus.Rejected => 1,
     _ => 0
   };
 
   private static string StatusClass(ProposalStatus s) => s switch
   {
-    ProposalStatus.ApprovedByHOD => "completed",
-    ProposalStatus.ApprovedActive => "completed",
+    ProposalStatus.CoordinatorApproved => "completed",
+    ProposalStatus.HODApproved => "completed",
+    ProposalStatus.SupervisorApproved => "active",
     ProposalStatus.Rejected => "danger",
     ProposalStatus.Draft => "pending",
     _ => "active"
   };
+
+  public void Dispose()
+  {
+    _pollCts.Cancel();
+    _pollCts.Dispose();
+  }
 
   public class ProposalModel
   {
     [System.ComponentModel.DataAnnotations.Required] public string Title { get; set; } = "";
     [System.ComponentModel.DataAnnotations.Required] public string Abstract { get; set; } = "";
     [System.ComponentModel.DataAnnotations.Required] public string Objectives { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required] public string Domain { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required] public string Technologies { get; set; } = "";
+    public string? GitHubUrl { get; set; }
   }
 }

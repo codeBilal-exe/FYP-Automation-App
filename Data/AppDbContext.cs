@@ -25,11 +25,18 @@ namespace FYP_AutomationSystem.Data
         public DbSet<PlagiarismReport> PlagiarismReports { get; set; }
         public DbSet<ReportArchive> ReportArchives { get; set; }
 
+        public DbSet<ProjectThread> ProjectThreads { get; set; }
+        public DbSet<ProjectTask> ProjectTasks { get; set; }
+        public DbSet<TaskSubmission> TaskSubmissions { get; set; }
+        public DbSet<RejectionHistory> RejectionHistories { get; set; }
+        public DbSet<GroupMessageThread> GroupMessageThreads { get; set; }
+        public DbSet<GroupMessage> GroupMessages { get; set; }
+        public DbSet<PersonalMessage> PersonalMessages { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // User Configuration
             modelBuilder.Entity<User>()
                 .HasKey(u => u.Id);
             modelBuilder.Entity<User>()
@@ -44,7 +51,6 @@ namespace FYP_AutomationSystem.Data
                 .HasIndex(u => u.Email)
                 .IsUnique();
 
-            // Group Configuration
             modelBuilder.Entity<Group>()
                 .HasKey(g => g.Id);
             modelBuilder.Entity<Group>()
@@ -69,7 +75,6 @@ namespace FYP_AutomationSystem.Data
                     l => l.HasOne<User>().WithMany().HasForeignKey("MembersId"),
                     r => r.HasOne<Group>().WithMany().HasForeignKey("GroupsId"));
 
-            // Project Configuration
             modelBuilder.Entity<Project>()
                 .HasKey(p => p.Id);
             modelBuilder.Entity<Project>()
@@ -92,7 +97,6 @@ namespace FYP_AutomationSystem.Data
                 .HasForeignKey(d => d.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Proposal Configuration
             modelBuilder.Entity<Proposal>()
                 .HasKey(p => p.Id);
             modelBuilder.Entity<Proposal>()
@@ -103,7 +107,6 @@ namespace FYP_AutomationSystem.Data
                 .Property(p => p.Abstract)
                 .IsRequired();
 
-            // Milestone Configuration
             modelBuilder.Entity<Milestone>()
                 .HasKey(m => m.Id);
             modelBuilder.Entity<Milestone>()
@@ -111,7 +114,6 @@ namespace FYP_AutomationSystem.Data
                 .IsRequired()
                 .HasMaxLength(255);
 
-            // Document Configuration
             modelBuilder.Entity<Document>()
                 .HasKey(d => d.Id);
             modelBuilder.Entity<Document>()
@@ -122,7 +124,6 @@ namespace FYP_AutomationSystem.Data
                 .Property(d => d.FilePath)
                 .IsRequired();
 
-            // Evaluation Configuration
             modelBuilder.Entity<Evaluation>()
                 .HasKey(e => e.Id);
             modelBuilder.Entity<Evaluation>()
@@ -136,7 +137,6 @@ namespace FYP_AutomationSystem.Data
                 .HasForeignKey(rs => rs.EvaluationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // RubricItem Configuration
             modelBuilder.Entity<RubricItem>()
                 .HasKey(ri => ri.Id);
             modelBuilder.Entity<RubricItem>()
@@ -144,7 +144,6 @@ namespace FYP_AutomationSystem.Data
                 .IsRequired()
                 .HasMaxLength(255);
 
-            // RubricScore Configuration
             modelBuilder.Entity<RubricScore>()
                 .HasKey(rs => rs.Id);
             modelBuilder.Entity<RubricScore>()
@@ -153,15 +152,21 @@ namespace FYP_AutomationSystem.Data
                 .HasForeignKey(rs => rs.RubricItemId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Notification Configuration
             modelBuilder.Entity<Notification>()
                 .HasKey(n => n.Id);
             modelBuilder.Entity<Notification>()
                 .Property(n => n.Title)
                 .IsRequired()
                 .HasMaxLength(255);
+            modelBuilder.Entity<Notification>()
+                .Property(n => n.Description)
+                .HasMaxLength(2000);
+            modelBuilder.Entity<Notification>()
+                .Property(n => n.EventType)
+                .HasMaxLength(128);
+            modelBuilder.Entity<Notification>()
+                .HasIndex(n => new { n.RecipientId, n.EventType, n.ReferenceId });
 
-            // Message Configuration
             modelBuilder.Entity<Message>()
                 .HasKey(m => m.Id);
             modelBuilder.Entity<Message>()
@@ -173,7 +178,6 @@ namespace FYP_AutomationSystem.Data
                 .HasForeignKey(m => m.SenderId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // VivaSlot Configuration
             modelBuilder.Entity<VivaSlot>()
                 .HasKey(vs => vs.Id);
             modelBuilder.Entity<VivaSlot>()
@@ -188,7 +192,6 @@ namespace FYP_AutomationSystem.Data
                     l => l.HasOne<User>().WithMany().HasForeignKey("PanelMembersId"),
                     r => r.HasOne<VivaSlot>().WithMany().HasForeignKey("VivaSlotsId"));
 
-            // AuditLog Configuration
             modelBuilder.Entity<AuditLog>()
                 .HasKey(al => al.Id);
             modelBuilder.Entity<AuditLog>()
@@ -196,11 +199,9 @@ namespace FYP_AutomationSystem.Data
                 .IsRequired()
                 .HasMaxLength(255);
 
-            // PlagiarismReport Configuration
             modelBuilder.Entity<PlagiarismReport>()
                 .HasKey(pr => pr.Id);
 
-            // ReportArchive Configuration
             modelBuilder.Entity<ReportArchive>()
                 .HasKey(ra => ra.Id);
             modelBuilder.Entity<ReportArchive>()
@@ -211,6 +212,21 @@ namespace FYP_AutomationSystem.Data
                 .Property(ra => ra.FilePath)
                 .IsRequired()
                 .HasMaxLength(500);
+
+            modelBuilder.Entity<ProjectThread>()
+                .HasKey(t => t.Id);
+            modelBuilder.Entity<ProjectTask>()
+                .HasKey(t => t.Id);
+            modelBuilder.Entity<TaskSubmission>()
+                .HasKey(s => s.Id);
+            modelBuilder.Entity<RejectionHistory>()
+                .HasKey(r => r.Id);
+            modelBuilder.Entity<GroupMessageThread>()
+                .HasKey(t => t.Id);
+            modelBuilder.Entity<GroupMessage>()
+                .HasKey(m => m.Id);
+            modelBuilder.Entity<PersonalMessage>()
+                .HasKey(m => m.Id);
         }
     }
 }
