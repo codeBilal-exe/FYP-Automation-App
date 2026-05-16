@@ -10,53 +10,59 @@
     <a class="auth-back" href="/"><i class="bi bi-arrow-left"></i> Back to overview</a>
     <div class="auth-kicker"><i class="bi bi-stars"></i> Final Year Project Lab</div>
     <h1>One command centre for every FYP workflow.</h1>
-    <p>Manage proposals, milestones, documents, vivas, evaluations, reports and team communication from role-aware dashboards.</p>
-    <div class="auth-metrics">
-      <div><strong>7</strong><span>Demo roles</span></div>
-      <div><strong>12+</strong><span>Core modules</span></div>
-      <div><strong>Live</strong><span>Dashboards</span></div>
-    </div>
-  </div>
-
-  <div class="auth-card pro-auth-card">
-    <div class="auth-logo"><i class="bi bi-mortarboard-fill"></i></div>
-    <h2>Welcome back</h2>
-    <p class="text-muted mb-4">Sign in with any demo account to continue.</p>
-
-    @if (!string.IsNullOrEmpty(_error))
-    {
-      <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
-    }
-
-    <form method="post" action="/auth/login" class="login-form">
-      <div class="mb-3">
-        <label class="form-label" for="email">Email</label>
-        <div class="input-icon-wrap">
-          <i class="bi bi-envelope"></i>
-          <input id="email" name="email" class="form-control" type="email" value="@_email" placeholder="you@fyp.edu" autocomplete="username" required />
-        </div>
+    <p>Manage proposals, milestones, documents, vivas, evaluations, reports and team communication from role-aware
+      dashboards.</p>
+      <div class="auth-metrics">
+        <div><strong>7</strong><span>Demo roles</span></div>
+        <div><strong>12+</strong><span>Core modules</span></div>
+        <div><strong>Live</strong><span>Dashboards</span></div>
       </div>
-      <div class="mb-3">
-        <label class="form-label" for="password">Password</label>
-        <div class="input-icon-wrap">
-          <i class="bi bi-lock"></i>
-          <input id="password" name="password" type="password" class="form-control" placeholder="••••••••" autocomplete="current-password" required />
-        </div>
-      </div>
-      <button class="btn btn-primary w-100 auth-submit" type="submit">
-        <span>Sign in</span><i class="bi bi-arrow-right"></i>
-      </button>
-    </form>
-
-    <div class="demo-creds mt-4">
-      <div class="demo-title"><i class="bi bi-key"></i> Demo accounts</div>
-      <button type="button" class="demo-pill" data-email="admin@fyp.edu" data-password="Admin@123">Admin</button>
-      <button type="button" class="demo-pill" data-email="supervisor1@fyp.edu" data-password="Super@123">Supervisor</button>
-      <button type="button" class="demo-pill" data-email="student1@fyp.edu" data-password="Student@123">Student</button>
-      <button type="button" class="demo-pill" data-email="hod@fyp.edu" data-password="HOD@123">HOD</button>
     </div>
-  </div>
-</section>
+
+    <div class="auth-card pro-auth-card">
+      <div class="auth-logo"><i class="bi bi-mortarboard-fill"></i></div>
+      <h2>Welcome back</h2>
+      <p class="text-muted mb-4">Sign in with any demo account to continue.</p>
+
+      @if (!string.IsNullOrEmpty(_error))
+      {
+        <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
+      }
+
+      <form method="post" action="/auth/login" class="login-form">
+        <div class="mb-3">
+          <label class="form-label" for="email">Email</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-envelope"></i>
+            <input id="email" name="email" class="form-control" type="email" value="@_email" placeholder="you@fyp.edu"
+                   autocomplete="username" required />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="password">Password</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-lock"></i>
+            <input id="password" name="password" type="password" class="form-control" placeholder="••••••••"
+                   autocomplete="current-password" required />
+          </div>
+        </div>
+        <button class="btn btn-primary w-100 auth-submit" type="submit">
+          <span>Sign in</span><i class="bi bi-arrow-right"></i>
+        </button>
+      </form>
+
+      <div class="demo-creds mt-4">
+        <div class="demo-title"><i class="bi bi-key"></i> Demo accounts</div>
+        <button type="button" class="demo-pill" data-email="admin@fyp.edu" data-password="Admin@123">Admin</button>
+        <button type="button" class="demo-pill" data-email="supervisor1@fyp.edu"
+                data-password="Super@123">Supervisor</button>
+        <button type="button" class="demo-pill" data-email="student1@fyp.edu" data-password="Student@123">Student</button>
+        <button type="button" class="demo-pill" data-email="hod@fyp.edu" data-password="HOD@123">HOD</button>
+        <button type="button" class="demo-pill" data-email="coordinator@fyp.edu "
+                data-password="Coord@123 ">Coordinator</button>
+      </div>
+    </div>
+  </section>
 
 @code {
   private string? _error;
