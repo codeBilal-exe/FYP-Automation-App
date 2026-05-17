@@ -33,6 +33,7 @@ namespace FYP_AutomationSystem.Data
         public DbSet<GroupMessage> GroupMessages { get; set; }
         public DbSet<PersonalMessage> PersonalMessages { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+        public DbSet<FacultyTimetable> FacultyTimetables { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -192,6 +193,26 @@ namespace FYP_AutomationSystem.Data
                     "VivaPanelMembers",
                     l => l.HasOne<User>().WithMany().HasForeignKey("PanelMembersId"),
                     r => r.HasOne<VivaSlot>().WithMany().HasForeignKey("VivaSlotsId"));
+            modelBuilder.Entity<VivaSlot>()
+                .HasOne(vs => vs.Group)
+                .WithMany()
+                .HasForeignKey(vs => vs.GroupId)
+                .OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<VivaSlot>()
+                .HasOne(vs => vs.Milestone)
+                .WithMany()
+                .HasForeignKey(vs => vs.MilestoneId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<FacultyTimetable>()
+                .HasKey(ft => ft.Id);
+            modelBuilder.Entity<FacultyTimetable>()
+                .HasOne(ft => ft.Faculty)
+                .WithMany()
+                .HasForeignKey(ft => ft.FacultyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<FacultyTimetable>()
+                .HasIndex(ft => new { ft.FacultyId, ft.Day });
 
             modelBuilder.Entity<AuditLog>()
                 .HasKey(al => al.Id);

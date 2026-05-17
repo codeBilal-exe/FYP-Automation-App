@@ -124,7 +124,7 @@
 }
 
 @code {
-  private readonly UserRole[] _roleCards = [UserRole.HOD, UserRole.Supervisor, UserRole.Coordinator, UserRole.Student];
+  private readonly UserRole[] _roleCards = [UserRole.HOD, UserRole.Supervisor, UserRole.Coordinator, UserRole.Panel, UserRole.Student, UserRole.Admin];
 
   private List<User> _users = new();
   private bool _showNew;
@@ -175,7 +175,9 @@
     UserRole.HOD => "bi-person-workspace",
     UserRole.Supervisor => "bi-person-badge",
     UserRole.Coordinator => "bi-kanban",
+    UserRole.Panel => "bi-person-check",
     UserRole.Student => "bi-mortarboard",
+    UserRole.Admin => "bi-shield-check",
     _ => "bi-person"
   };
 

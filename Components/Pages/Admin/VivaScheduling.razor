@@ -4,71 +4,567 @@
 @inject AppDbContext Db
 @inject VivaService VivaService
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
+@using System.IO
+@using System.Globalization
 
 <div class="page-header">
-  <div><h1>Viva Scheduling</h1><div class="page-subtitle">Schedule and manage viva slots.</div></div>
-  <button class="btn btn-primary" @onclick="() => _show = true"><i class="bi bi-plus-lg me-1"></i>New Slot</button>
+  <div><h1>Viva Scheduling</h1><div class="page-subtitle">Schedule viva, presentation & evaluation slots · Assign available faculty panel</div></div>
+  <button class="btn btn-primary" @onclick="OpenNewSlotDialog"><i class="bi bi-plus-lg me-1"></i>Schedule New Slot</button>
 </div>
 
-<div class="fcard">
-  <table class="ftable">
-    <thead><tr><th>Date / Time</th><th>Project</th><th>Venue</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      @foreach (var v in _vivas)
-      {
-        var p = _projects.FirstOrDefault(x => x.Id == v.ProjectId);
+@* ── Scheduled slots table ── *@
+<div class="fcard mb-3">
+  <div class="fcard-title"><i class="bi bi-calendar2-week"></i> Scheduled Slots</div>
+  @if (_slots.Count == 0)
+  {
+    <div class="empty-state"><i class="bi bi-calendar-x"></i>No slots scheduled yet. Click "Schedule New Slot" to begin.</div>
+  }
+  else
+  {
+    <table class="ftable">
+      <thead>
         <tr>
-          <td>@v.ScheduledAt.ToString("MMM dd, yyyy HH:mm")</td>
-          <td>@(p?.Title ?? "—")</td>
-          <td>@v.Venue</td>
-          <td><span class="fbadge @(v.Status.ToString().ToLower())">@v.Status</span></td>
-          <td><button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(v)"><i class="bi bi-trash"></i></button></td>
+          <th>Date</th>
+          <th>Time Slot</th>
+          <th>Type</th>
+          <th>Group</th>
+          <th>Venue</th>
+          <th>Panel Members</th>
+          <th>Status</th>
+          <th></th>
         </tr>
-      }
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        @foreach (var s in _slots)
+        {
+          <tr>
+            <td>@s.ScheduledAt.ToString("ddd, MMM dd yyyy")</td>
+            <td><span class="fbadge info">@FormatTime(s.StartTime) – @FormatTime(s.EndTime)</span></td>
+            <td><span class="fbadge @SlotTypeClass(s.SlotType)">@s.SlotType</span></td>
+            <td>@(s.Group?.GroupName ?? "—")</td>
+            <td>@s.Venue</td>
+            <td>
+              @if (s.PanelMembers.Count == 0)
+              {
+                <span class="text-muted">None</span>
+              }
+              else
+              {
+                @foreach (var pm in s.PanelMembers)
+                {
+                  <span class="viva-panel-chip">@pm.FullName</span>
+                }
+              }
+            </td>
+            <td><span class="fbadge @(s.Status.ToString().ToLower())">@s.Status</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => DeleteSlot(s)"><i class="bi bi-trash"></i></button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
 </div>
 
-@if (_show)
+@* ── Upload Faculty Timetable ── *@
+<div class="fcard mb-3">
+  <div class="fcard-title"><i class="bi bi-cloud-arrow-up"></i> Upload Faculty Timetable</div>
+  <p class="text-muted" style="font-size:.85rem">Upload a CSV or Excel (.xlsx) file from the university database. The system will store faculty schedules and use them to filter available panel members during slot scheduling.</p>
+
+  <div class="viva-upload-info mb-3">
+    <div class="fw-bold mb-1" style="font-size:.82rem">Required Columns:</div>
+    <code style="font-size:.78rem">FacultyEmail, Day, StartTime, EndTime, Subject, RoomNumber</code>
+    <div class="text-muted mt-1" style="font-size:.78rem">
+      Day: Monday/Tuesday/... or Mon/Tue/... · Time: HH:mm (e.g. 09:00, 14:30) · Faculty must be a registered user.
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <InputFile OnChange="HandleFileUpload" accept=".csv,.xlsx" class="form-control" style="max-width:400px" />
+    @if (_uploading)
+    {
+      <div class="d-flex align-items-center gap-2 text-muted"><div class="fspinner" style="width:22px;height:22px;border-width:2px"></div> Importing...</div>
+    }
+  </div>
+
+  @if (_uploadResult != null)
+  {
+    var ur = _uploadResult.Value;
+    <div class="mt-2 py-2 px-3 rounded-3" style="background: @(ur.Errors.Count > 0 ? "rgba(239,68,68,.08)" : "rgba(34,197,94,.08)"); font-size:.85rem">
+      <strong>@ur.Imported imported</strong>, @ur.Skipped skipped.
+      @if (ur.Errors.Count > 0)
+      {
+        <ul class="mt-1 mb-0" style="padding-left:1.2rem">
+          @foreach (var e in ur.Errors.Take(5))
+          {
+            <li class="text-danger">@e</li>
+          }
+          @if (ur.Errors.Count > 5)
+          {
+            <li class="text-muted">...and @(ur.Errors.Count - 5) more</li>
+          }
+        </ul>
+      }
+    </div>
+  }
+
+  <div class="text-muted mt-2" style="font-size:.8rem">
+    <i class="bi bi-database-check me-1"></i> Current timetable entries in database: <strong>@_timetableCount</strong>
+  </div>
+</div>
+
+@* ── New Slot Modal ── *@
+@if (_showModal)
 {
-  <div class="modal-backdrop-c" @onclick="() => _show = false">
-    <div class="modal-card" @onclick:stopPropagation>
-      <h5>New Viva Slot</h5>
-      <div class="mb-2"><label class="form-label">Date / Time</label><input type="datetime-local" class="form-control" @bind="_when" /></div>
-      <div class="mb-2"><label class="form-label">Venue</label><input class="form-control" @bind="_venue" /></div>
-      <div class="mb-3"><label class="form-label">Project</label>
-        <select class="form-select" @bind="_pid">
-          <option value="0">— Select —</option>
-          @foreach (var p in _projects) { <option value="@p.Id">@p.Title</option> }
-        </select>
+  <div class="modal-backdrop-c" @onclick="() => _showModal = false">
+    <div class="modal-card viva-modal-wide" @onclick:stopPropagation>
+      <h5 class="mb-3"><i class="bi bi-calendar-plus me-2"></i>Schedule New Slot</h5>
+
+      @if (!string.IsNullOrEmpty(_error))
+      {
+        <div class="viva-alert-danger">@_error</div>
+      }
+
+      <div class="viva-row mb-3">
+        <div class="viva-col">
+          <label class="form-label">Date</label>
+          <input type="date" class="form-control" @bind="_newDate" />
+        </div>
+        <div class="viva-col">
+          <label class="form-label">Start Time</label>
+          <select class="form-select" @bind="_newStart" @bind:after="OnTimeChanged">
+            @for (int h = 8; h <= 16; h++)
+            {
+              <option value="@h">@($"{h:00}:00")</option>
+              <option value="@(h).5">@($"{h:00}:30")</option>
+            }
+          </select>
+        </div>
+        <div class="viva-col">
+          <label class="form-label">End Time (30 min)</label>
+          <input type="text" class="form-control" value="@FormatDecimalTime(_newEnd)" disabled />
+        </div>
       </div>
+
+      <div class="viva-row mb-3">
+        <div class="viva-col">
+          <label class="form-label">Slot Type</label>
+          <select class="form-select" @bind="_newSlotType">
+            <option value="@SlotType.Viva">Viva</option>
+            <option value="@SlotType.Presentation">Presentation</option>
+            <option value="@SlotType.Evaluation">Evaluation</option>
+          </select>
+        </div>
+        <div class="viva-col">
+          <label class="form-label">Group</label>
+          <select class="form-select" @bind="_newGroupId">
+            <option value="0">— Select Group —</option>
+            @foreach (var g in _groups)
+            {
+              <option value="@g.Id">@g.GroupName (@g.Department)</option>
+            }
+          </select>
+        </div>
+        <div class="viva-col">
+          <label class="form-label">Venue</label>
+          <input class="form-control" @bind="_newVenue" placeholder="e.g. CS-Lab-1" />
+        </div>
+      </div>
+
+      @* Panel assignment section *@
+      <div class="viva-panel-section mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <label class="form-label mb-0 fw-bold"><i class="bi bi-people-fill me-1"></i>Assign Panel Members (up to 6)</label>
+          <button class="btn btn-sm btn-primary" @onclick="FetchAvailableFaculty" disabled="@_fetchingFaculty">
+            @if (_fetchingFaculty)
+            {
+              <span class="spinner-border spinner-border-sm me-1"></span>
+            }
+            <i class="bi bi-search me-1"></i>Find Available Faculty
+          </button>
+        </div>
+
+        @if (_fetchingFaculty)
+        {
+          <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-hourglass-split me-1"></i>Checking availability...</div>
+        }
+        else if (_modalAvailFaculty != null)
+        {
+          @if (_modalAvailFaculty.Count == 0)
+          {
+            <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-exclamation-circle me-1"></i>No faculty available for this time slot. All faculty have class or existing viva commitments.</div>
+          }
+          else
+          {
+            <p class="text-muted mb-2" style="font-size:.82rem"><strong>@_modalAvailFaculty.Count</strong> faculty available for @_newDate.ToString("ddd, MMM dd") · @FormatDecimalTime(_newStart) – @FormatDecimalTime(_newEnd)</p>
+            <div class="viva-faculty-pick-grid">
+              @foreach (var f in _modalAvailFaculty)
+              {
+                var isSelected = _selectedPanelIds.Contains(f.Id);
+                <div class="viva-faculty-pick @(isSelected ? "selected" : "")" @onclick="() => TogglePanel(f.Id)">
+                  <div class="viva-faculty-avatar sm">@f.FullName[0]</div>
+                  <div>
+                    <div class="fw-bold" style="font-size:.85rem">@f.FullName</div>
+                    <div class="text-muted" style="font-size:.72rem">@f.Role · @(f.Expertise ?? "General")</div>
+                  </div>
+                  <i class="bi @(isSelected ? "bi-check-circle-fill text-success" : "bi-circle") ms-auto"></i>
+                </div>
+              }
+            </div>
+            <div class="text-muted mt-1" style="font-size:.78rem">Selected: @_selectedPanelIds.Count / 6</div>
+          }
+        }
+        else
+        {
+          <div class="text-muted py-2" style="font-size:.85rem">Select date & time, then click "Find Available Faculty" to see who's free for this slot.</div>
+        }
+      </div>
+
       <div class="d-flex justify-content-end gap-2">
-        <button class="btn btn-light" @onclick="() => _show = false">Cancel</button>
-        <button class="btn btn-primary" @onclick="Create">Create</button>
+        <button class="btn btn-light" @onclick="() => _showModal = false">Cancel</button>
+        <button class="btn btn-primary" @onclick="CreateSlot" disabled="@_creating">
+          @if (_creating)
+          {
+            <span class="spinner-border spinner-border-sm me-1"></span>
+          }
+          Schedule Slot
+        </button>
       </div>
     </div>
   </div>
 }
 
 @code {
-  private List<VivaSlot> _vivas = new();
-  private List<Project> _projects = new();
-  private bool _show;
-  private DateTime _when = DateTime.Now.AddDays(7);
-  private string _venue = "";
-  private int _pid;
+  // ── State ──
+  private List<VivaSlot> _slots = new();
+  private List<Group> _groups = new();
+  private int _timetableCount;
+
+  // New slot modal
+  private bool _showModal;
+  private DateTime _newDate = DateTime.Today.AddDays(7);
+  private double _newStart = 9;
+  private double _newEnd = 9.5;
+  private SlotType _newSlotType = SlotType.Viva;
+  private int _newGroupId;
+  private string _newVenue = "";
+  private List<User>? _modalAvailFaculty;
+  private HashSet<int> _selectedPanelIds = new();
+  private bool _creating;
+  private bool _fetchingFaculty;
+  private string _error = "";
+
+  // Upload
+  private bool _uploading;
+  private (int Imported, int Skipped, List<string> Errors)? _uploadResult;
+
   protected override async Task OnInitializedAsync() => await Load();
+
   private async Task Load()
   {
-    _vivas = await Db.VivaSlots.OrderByDescending(v => v.ScheduledAt).ToListAsync();
-    _projects = await Db.Projects.ToListAsync();
+    _slots = await VivaService.GetAllScheduledSlots();
+    _groups = await Db.Groups.Include(g => g.Project).OrderBy(g => g.GroupName).ToListAsync();
+    _timetableCount = await VivaService.GetTimetableCount();
   }
-  private async Task Create()
+
+  // ── New slot modal ──
+  private void OpenNewSlotDialog()
   {
-    if (_pid == 0 || string.IsNullOrWhiteSpace(_venue)) return;
-    await VivaService.CreateVivaSlot(_when, _venue, _pid);
-    _show = false; _venue = ""; _pid = 0;
+    _showModal = true;
+    _newDate = DateTime.Today.AddDays(7);
+    _newStart = 9;
+    _newEnd = 9.5;
+    _newSlotType = SlotType.Viva;
+    _newGroupId = 0;
+    _newVenue = "";
+    _modalAvailFaculty = null;
+    _selectedPanelIds = new();
+    _error = "";
+    _creating = false;
+    _fetchingFaculty = false;
+  }
+
+  private void OnTimeChanged()
+  {
+    _newEnd = _newStart + 0.5;
+    _modalAvailFaculty = null;
+    _selectedPanelIds = new();
+  }
+
+  private async Task FetchAvailableFaculty()
+  {
+    _fetchingFaculty = true;
+    _error = "";
+    StateHasChanged();
+
+    try
+    {
+      var start = DecimalToTimeSpan(_newStart);
+      var end = DecimalToTimeSpan(_newEnd);
+      var day = _newDate.DayOfWeek;
+      _modalAvailFaculty = await VivaService.GetAvailableFaculty(day, start, end, _newDate);
+      _selectedPanelIds = new();
+    }
+    catch (Exception ex)
+    {
+      _error = $"Error fetching faculty: {ex.Message}";
+      _modalAvailFaculty = new List<User>();
+    }
+    finally
+    {
+      _fetchingFaculty = false;
+    }
+  }
+
+  private void TogglePanel(int id)
+  {
+    if (_selectedPanelIds.Contains(id))
+      _selectedPanelIds.Remove(id);
+    else if (_selectedPanelIds.Count < 6)
+      _selectedPanelIds.Add(id);
+  }
+
+  private async Task CreateSlot()
+  {
+    _error = "";
+    if (_newGroupId == 0) { _error = "Please select a group."; return; }
+    if (string.IsNullOrWhiteSpace(_newVenue)) { _error = "Please enter a venue."; return; }
+    if (_newDate.Date < DateTime.Today) { _error = "Date cannot be in the past."; return; }
+    if (_selectedPanelIds.Count == 0) { _error = "Please assign at least one panel member."; return; }
+
+    _creating = true;
+    var start = DecimalToTimeSpan(_newStart);
+    var end = DecimalToTimeSpan(_newEnd);
+
+    var result = await VivaService.CreateScheduledSlot(
+        _newDate, start, end, _newVenue, _newGroupId, null, _newSlotType,
+        _selectedPanelIds.ToList());
+
+    if (result == null)
+    {
+      _error = "Failed to create slot. Make sure the group has a project assigned.";
+      _creating = false;
+      return;
+    }
+
+    _showModal = false;
+    _creating = false;
     await Load();
   }
-  private async Task Delete(VivaSlot v) { await VivaService.DeleteVivaSlot(v.Id); await Load(); }
+
+  private async Task DeleteSlot(VivaSlot s)
+  {
+    await VivaService.DeleteVivaSlot(s.Id);
+    await Load();
+  }
+
+  // ── File upload ──
+  private async Task HandleFileUpload(InputFileChangeEventArgs e)
+  {
+    _uploading = true;
+    _uploadResult = null;
+    StateHasChanged();
+
+    try
+    {
+      var file = e.File;
+      var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+
+      List<TimetableImportRow> rows;
+
+      using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+      using var ms = new MemoryStream();
+      await stream.CopyToAsync(ms);
+      ms.Position = 0;
+
+      if (ext == ".csv")
+      {
+        rows = ParseCsv(ms);
+      }
+      else if (ext == ".xlsx")
+      {
+        rows = ParseExcel(ms);
+      }
+      else
+      {
+        _uploadResult = (0, 0, new List<string> { "Unsupported file format. Use .csv or .xlsx" });
+        _uploading = false;
+        return;
+      }
+
+      if (rows.Count == 0)
+      {
+        _uploadResult = (0, 0, new List<string> { "No data rows found in the file." });
+        _uploading = false;
+        return;
+      }
+
+      _uploadResult = await VivaService.ImportTimetableAsync(rows);
+      _timetableCount = await VivaService.GetTimetableCount();
+    }
+    catch (Exception ex)
+    {
+      _uploadResult = (0, 0, new List<string> { $"Upload error: {ex.Message}" });
+    }
+    finally
+    {
+      _uploading = false;
+    }
+  }
+
+  private static List<TimetableImportRow> ParseCsv(Stream stream)
+  {
+    var rows = new List<TimetableImportRow>();
+    using var reader = new StreamReader(stream);
+    var headerLine = reader.ReadLine();
+    if (headerLine == null) return rows;
+
+    while (!reader.EndOfStream)
+    {
+      var line = reader.ReadLine();
+      if (string.IsNullOrWhiteSpace(line)) continue;
+
+      var parts = line.Split(',');
+      if (parts.Length < 4) continue;
+
+      rows.Add(new TimetableImportRow
+      {
+        FacultyEmail = parts[0].Trim(),
+        Day = parts[1].Trim(),
+        StartTime = parts[2].Trim(),
+        EndTime = parts[3].Trim(),
+        Subject = parts.Length > 4 ? parts[4].Trim() : "",
+        RoomNumber = parts.Length > 5 ? parts[5].Trim() : ""
+      });
+    }
+    return rows;
+  }
+
+  private static List<TimetableImportRow> ParseExcel(Stream stream)
+  {
+    var rows = new List<TimetableImportRow>();
+    try
+    {
+      using var workbook = new ClosedXML.Excel.XLWorkbook(stream);
+      var ws = workbook.Worksheets.First();
+      var lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+      for (int r = 2; r <= lastRow; r++)
+      {
+        var email = ws.Cell(r, 1).GetString().Trim();
+        if (string.IsNullOrWhiteSpace(email)) continue;
+
+        rows.Add(new TimetableImportRow
+        {
+          FacultyEmail = email,
+          Day = ws.Cell(r, 2).GetString().Trim(),
+          StartTime = ws.Cell(r, 3).GetString().Trim(),
+          EndTime = ws.Cell(r, 4).GetString().Trim(),
+          Subject = ws.Cell(r, 5).GetString().Trim(),
+          RoomNumber = ws.Cell(r, 6).GetString().Trim()
+        });
+      }
+    }
+    catch (Exception ex)
+    {
+      Console.WriteLine($"Excel parse error: {ex.Message}");
+    }
+    return rows;
+  }
+
+  // ── Helpers ──
+  private static TimeSpan DecimalToTimeSpan(double d)
+  {
+    var hours = (int)d;
+    var minutes = (d - hours) >= 0.5 ? 30 : 0;
+    return new TimeSpan(hours, minutes, 0);
+  }
+
+  private static string FormatTime(TimeSpan t) => $"{t.Hours:00}:{t.Minutes:00}";
+
+  private static string FormatDecimalTime(double d)
+  {
+    var h = (int)d;
+    var m = (d - h) >= 0.5 ? 30 : 0;
+    return $"{h:00}:{m:00}";
+  }
+
+  private static string SlotTypeClass(SlotType t) => t switch
+  {
+    SlotType.Viva => "info",
+    SlotType.Presentation => "warning",
+    SlotType.Evaluation => "success",
+    _ => "info"
+  };
 }
+
+<style>
+  .viva-modal-wide { max-width: 720px; }
+  .viva-panel-chip {
+    display: inline-block;
+    background: var(--primary-glow);
+    color: var(--primary-700);
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    margin: 2px 3px;
+  }
+  .viva-faculty-avatar {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), #8b5cf6);
+    color: #fff;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: .85rem;
+    flex-shrink: 0;
+  }
+  .viva-faculty-avatar.sm { width: 32px; height: 32px; font-size: .75rem; }
+  .viva-faculty-pick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: .5rem;
+  }
+  .viva-faculty-pick {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .7rem;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all .18s ease;
+    background: #fff;
+  }
+  .viva-faculty-pick:hover { border-color: var(--primary); background: var(--primary-glow); }
+  .viva-faculty-pick.selected {
+    border-color: var(--success);
+    background: rgba(34,197,94,.08);
+    box-shadow: 0 0 0 3px rgba(34,197,94,.15);
+  }
+  .viva-panel-section {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+  }
+  .viva-upload-info {
+    background: #f0f4ff;
+    border: 1px solid rgba(99,102,241,.15);
+    border-radius: 10px;
+    padding: .75rem 1rem;
+  }
+  .viva-row { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .viva-col { flex: 1; min-width: 180px; }
+  .viva-alert-danger {
+    background: rgba(239,68,68,.1);
+    border: 1px solid rgba(239,68,68,.25);
+    color: #b91c1c;
+    padding: .5rem .75rem;
+    border-radius: 8px;
+    font-size: .85rem;
+    margin-bottom: .75rem;
+  }
+</style>

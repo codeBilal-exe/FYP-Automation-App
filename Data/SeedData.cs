@@ -21,7 +21,10 @@ namespace FYP_AutomationSystem.Data
                 ("Dr. Supervisor", "supervisor1@fyp.edu", "Super@123", UserRole.Supervisor, "AI / Machine Learning"),
                 ("Dr. Supervisor Two", "supervisor2@fyp.edu", "Super@123", UserRole.Supervisor, "Software Engineering"),
                 ("Dr. Supervisor Three", "supervisor3@fyp.edu", "Super@123", UserRole.Supervisor, "Data Science"),
-                ("Panel Member", "panel@fyp.edu", "Panel@123", UserRole.Panel, null),
+                ("Panel Member", "panel@fyp.edu", "Panel@123", UserRole.Panel, "Database Systems"),
+                ("Dr. Panel Two", "panel2@fyp.edu", "Panel@123", UserRole.Panel, "Web Technologies"),
+                ("Dr. Panel Three", "panel3@fyp.edu", "Panel@123", UserRole.Panel, "Networking"),
+                ("Dr. Panel Four", "panel4@fyp.edu", "Panel@123", UserRole.Panel, "Cyber Security"),
                 ("Alice Student", "student1@fyp.edu", "Student@123", UserRole.Student, null),
                 ("Bob Student", "student2@fyp.edu", "Student@123", UserRole.Student, null),
                 ("Charlie Student", "student3@fyp.edu", "Student@123", UserRole.Student, null),
@@ -170,6 +173,78 @@ namespace FYP_AutomationSystem.Data
                 );
                 await db.SaveChangesAsync();
             }
+
+            // ── Faculty Timetable seed data ──
+            if (!await db.FacultyTimetables.AnyAsync())
+            {
+                var supervisor3 = await db.Users.FirstAsync(u => u.Email == "supervisor3@fyp.edu");
+                var panel = await db.Users.FirstAsync(u => u.Email == "panel@fyp.edu");
+                var panel2 = await db.Users.FirstAsync(u => u.Email == "panel2@fyp.edu");
+                var panel3 = await db.Users.FirstAsync(u => u.Email == "panel3@fyp.edu");
+                var panel4 = await db.Users.FirstAsync(u => u.Email == "panel4@fyp.edu");
+                var coordinator = await db.Users.FirstAsync(u => u.Email == "coordinator@fyp.edu");
+                var hod = await db.Users.FirstAsync(u => u.Email == "hod@fyp.edu");
+
+                // Dr. Supervisor (supervisor1) — teaches Mon/Wed/Fri mornings
+                db.FacultyTimetables.AddRange(
+                    new FacultyTimetable { FacultyId = supervisor1.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(8, 0, 0),  EndTime = new TimeSpan(9, 0, 0),  Subject = "Artificial Intelligence",   RoomNumber = "CS-101" },
+                    new FacultyTimetable { FacultyId = supervisor1.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(11, 0, 0), Subject = "Machine Learning",          RoomNumber = "CS-102" },
+                    new FacultyTimetable { FacultyId = supervisor1.Id, Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(8, 0, 0),  EndTime = new TimeSpan(9, 0, 0),  Subject = "Artificial Intelligence",   RoomNumber = "CS-101" },
+                    new FacultyTimetable { FacultyId = supervisor1.Id, Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(11, 0, 0), EndTime = new TimeSpan(12, 0, 0), Subject = "Deep Learning",             RoomNumber = "CS-201" },
+                    new FacultyTimetable { FacultyId = supervisor1.Id, Day = DayOfWeek.Friday,     StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Machine Learning",          RoomNumber = "CS-102" },
+                    new FacultyTimetable { FacultyId = supervisor1.Id, Day = DayOfWeek.Friday,     StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "AI Lab",                    RoomNumber = "Lab-3" },
+
+                    // Dr. Supervisor Two (supervisor2) — teaches Tue/Thu
+                    new FacultyTimetable { FacultyId = supervisor2.Id, Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Software Engineering",      RoomNumber = "CS-201" },
+                    new FacultyTimetable { FacultyId = supervisor2.Id, Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(11, 0, 0), EndTime = new TimeSpan(12, 0, 0), Subject = "Software Design Patterns",  RoomNumber = "CS-103" },
+                    new FacultyTimetable { FacultyId = supervisor2.Id, Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "SE Lab",                    RoomNumber = "Lab-1" },
+                    new FacultyTimetable { FacultyId = supervisor2.Id, Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Software Engineering",      RoomNumber = "CS-201" },
+                    new FacultyTimetable { FacultyId = supervisor2.Id, Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(11, 0, 0), EndTime = new TimeSpan(12, 0, 0), Subject = "Agile Methodologies",       RoomNumber = "CS-104" },
+                    new FacultyTimetable { FacultyId = supervisor2.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "Project Management",        RoomNumber = "CS-105" },
+
+                    // Dr. Supervisor Three (supervisor3) — teaches Mon/Wed/Fri afternoons
+                    new FacultyTimetable { FacultyId = supervisor3.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(13, 0, 0), EndTime = new TimeSpan(14, 0, 0), Subject = "Data Science",              RoomNumber = "CS-301" },
+                    new FacultyTimetable { FacultyId = supervisor3.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(15, 0, 0), EndTime = new TimeSpan(16, 0, 0), Subject = "Big Data Analytics",        RoomNumber = "CS-302" },
+                    new FacultyTimetable { FacultyId = supervisor3.Id, Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Statistics",                RoomNumber = "CS-201" },
+                    new FacultyTimetable { FacultyId = supervisor3.Id, Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(13, 0, 0), EndTime = new TimeSpan(14, 0, 0), Subject = "Data Science",              RoomNumber = "CS-301" },
+                    new FacultyTimetable { FacultyId = supervisor3.Id, Day = DayOfWeek.Friday,     StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(11, 0, 0), Subject = "Data Mining",               RoomNumber = "CS-303" },
+                    new FacultyTimetable { FacultyId = supervisor3.Id, Day = DayOfWeek.Friday,     StartTime = new TimeSpan(15, 0, 0), EndTime = new TimeSpan(16, 0, 0), Subject = "DS Lab",                    RoomNumber = "Lab-2" },
+
+                    // Panel Member — teaches Tue/Thu mornings
+                    new FacultyTimetable { FacultyId = panel.Id,       Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(8, 0, 0),  EndTime = new TimeSpan(9, 0, 0),  Subject = "Database Systems",          RoomNumber = "CS-104" },
+                    new FacultyTimetable { FacultyId = panel.Id,       Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(11, 0, 0), Subject = "Web Development",           RoomNumber = "Lab-1" },
+                    new FacultyTimetable { FacultyId = panel.Id,       Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(8, 0, 0),  EndTime = new TimeSpan(9, 0, 0),  Subject = "Database Systems",          RoomNumber = "CS-104" },
+                    new FacultyTimetable { FacultyId = panel.Id,       Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(11, 0, 0), Subject = "Web Development",           RoomNumber = "Lab-1" },
+                    new FacultyTimetable { FacultyId = panel.Id,       Day = DayOfWeek.Friday,     StartTime = new TimeSpan(11, 0, 0), EndTime = new TimeSpan(12, 0, 0), Subject = "Cloud Computing",           RoomNumber = "CS-202" },
+
+                    // Coordinator — teaches Mon/Wed
+                    new FacultyTimetable { FacultyId = coordinator.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Operating Systems",         RoomNumber = "CS-105" },
+                    new FacultyTimetable { FacultyId = coordinator.Id, Day = DayOfWeek.Monday,    StartTime = new TimeSpan(11, 0, 0), EndTime = new TimeSpan(12, 0, 0), Subject = "Computer Networks",         RoomNumber = "CS-106" },
+                    new FacultyTimetable { FacultyId = coordinator.Id, Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(11, 0, 0), Subject = "Operating Systems",         RoomNumber = "CS-105" },
+                    new FacultyTimetable { FacultyId = coordinator.Id, Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "OS Lab",                    RoomNumber = "Lab-2" },
+
+                    // HOD — teaches Tue/Thu afternoons
+                    new FacultyTimetable { FacultyId = hod.Id,         Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(13, 0, 0), EndTime = new TimeSpan(14, 0, 0), Subject = "Compiler Design",           RoomNumber = "CS-301" },
+                    new FacultyTimetable { FacultyId = hod.Id,         Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(15, 0, 0), EndTime = new TimeSpan(16, 0, 0), Subject = "Theory of Computation",     RoomNumber = "CS-302" },
+                    new FacultyTimetable { FacultyId = hod.Id,         Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(13, 0, 0), EndTime = new TimeSpan(14, 0, 0), Subject = "Compiler Design",           RoomNumber = "CS-301" },
+                    new FacultyTimetable { FacultyId = hod.Id,         Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(15, 0, 0), EndTime = new TimeSpan(16, 0, 0), Subject = "Compiler Lab",              RoomNumber = "Lab-3" },
+
+                    // Dr. Panel Two — teaches Mon/Wed mornings
+                    new FacultyTimetable { FacultyId = panel2.Id,      Day = DayOfWeek.Monday,    StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Web Technologies",          RoomNumber = "Lab-1" },
+                    new FacultyTimetable { FacultyId = panel2.Id,      Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Web Technologies",          RoomNumber = "Lab-1" },
+                    new FacultyTimetable { FacultyId = panel2.Id,      Day = DayOfWeek.Wednesday,  StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "Internet of Things",        RoomNumber = "CS-202" },
+
+                    // Dr. Panel Three — teaches Tue/Thu afternoons
+                    new FacultyTimetable { FacultyId = panel3.Id,      Day = DayOfWeek.Tuesday,   StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "Computer Networks",         RoomNumber = "CS-106" },
+                    new FacultyTimetable { FacultyId = panel3.Id,      Day = DayOfWeek.Thursday,   StartTime = new TimeSpan(14, 0, 0), EndTime = new TimeSpan(15, 0, 0), Subject = "Network Security",          RoomNumber = "CS-106" },
+
+                    // Dr. Panel Four — teaches Mon/Fri
+                    new FacultyTimetable { FacultyId = panel4.Id,      Day = DayOfWeek.Monday,    StartTime = new TimeSpan(11, 0, 0), EndTime = new TimeSpan(12, 0, 0), Subject = "Ethical Hacking",           RoomNumber = "Lab-3" },
+                    new FacultyTimetable { FacultyId = panel4.Id,      Day = DayOfWeek.Friday,     StartTime = new TimeSpan(9, 0, 0),  EndTime = new TimeSpan(10, 0, 0), Subject = "Cyber Security",            RoomNumber = "CS-303" },
+                    new FacultyTimetable { FacultyId = panel4.Id,      Day = DayOfWeek.Friday,     StartTime = new TimeSpan(13, 0, 0), EndTime = new TimeSpan(14, 0, 0), Subject = "Digital Forensics",         RoomNumber = "CS-304" }
+                );
+                await db.SaveChangesAsync();
+            }
         }
 
         private static async Task UpsertDemoUserAsync(
@@ -264,7 +339,15 @@ namespace FYP_AutomationSystem.Data
                         "CREATE TABLE IF NOT EXISTS \"PasswordResetTokens\" (\"Id\" SERIAL PRIMARY KEY, \"UserId\" integer NOT NULL, \"TokenHash\" character varying(128) NOT NULL, \"RequestedAt\" timestamp with time zone NOT NULL, \"ExpiresAt\" timestamp with time zone NOT NULL, \"UsedAt\" timestamp with time zone NULL);",
                         "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PasswordResetTokens_TokenHash\" ON \"PasswordResetTokens\" (\"TokenHash\");",
                         "CREATE INDEX IF NOT EXISTS \"IX_PasswordResetTokens_UserId_ExpiresAt\" ON \"PasswordResetTokens\" (\"UserId\", \"ExpiresAt\");",
-                        "CREATE INDEX IF NOT EXISTS \"IX_Notifications_RecipientId_EventType_ReferenceId\" ON \"Notifications\" (\"RecipientId\", \"EventType\", \"ReferenceId\");"
+                        "CREATE INDEX IF NOT EXISTS \"IX_Notifications_RecipientId_EventType_ReferenceId\" ON \"Notifications\" (\"RecipientId\", \"EventType\", \"ReferenceId\");",
+                        // Viva scheduling enhancements
+                        "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"GroupId\" integer NULL;",
+                        "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"MilestoneId\" integer NULL;",
+                        "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"SlotType\" integer NOT NULL DEFAULT 0;",
+                        "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"StartTime\" interval NOT NULL DEFAULT '00:00:00';",
+                        "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"EndTime\" interval NOT NULL DEFAULT '00:00:00';",
+                        "CREATE TABLE IF NOT EXISTS \"FacultyTimetables\" (\"Id\" SERIAL PRIMARY KEY, \"FacultyId\" integer NOT NULL, \"Day\" integer NOT NULL, \"StartTime\" interval NOT NULL, \"EndTime\" interval NOT NULL, \"Subject\" text NOT NULL DEFAULT '', \"RoomNumber\" text NOT NULL DEFAULT '');",
+                        "CREATE INDEX IF NOT EXISTS \"IX_FacultyTimetables_FacultyId_Day\" ON \"FacultyTimetables\" (\"FacultyId\", \"Day\");"
                     };
 
                     foreach (var statement in sql)
@@ -310,7 +393,15 @@ namespace FYP_AutomationSystem.Data
                         "CREATE TABLE IF NOT EXISTS PasswordResetTokens (Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, TokenHash TEXT NOT NULL, RequestedAt TEXT NOT NULL, ExpiresAt TEXT NOT NULL, UsedAt TEXT NULL);",
                         "CREATE UNIQUE INDEX IF NOT EXISTS IX_PasswordResetTokens_TokenHash ON PasswordResetTokens (TokenHash);",
                         "CREATE INDEX IF NOT EXISTS IX_PasswordResetTokens_UserId_ExpiresAt ON PasswordResetTokens (UserId, ExpiresAt);",
-                        "CREATE INDEX IF NOT EXISTS IX_Notifications_RecipientId_EventType_ReferenceId ON Notifications (RecipientId, EventType, ReferenceId);"
+                        "CREATE INDEX IF NOT EXISTS IX_Notifications_RecipientId_EventType_ReferenceId ON Notifications (RecipientId, EventType, ReferenceId);",
+                        // Viva scheduling enhancements
+                        "ALTER TABLE VivaSlots ADD COLUMN GroupId INTEGER NULL;",
+                        "ALTER TABLE VivaSlots ADD COLUMN MilestoneId INTEGER NULL;",
+                        "ALTER TABLE VivaSlots ADD COLUMN SlotType INTEGER NOT NULL DEFAULT 0;",
+                        "ALTER TABLE VivaSlots ADD COLUMN StartTime TEXT NOT NULL DEFAULT '00:00:00';",
+                        "ALTER TABLE VivaSlots ADD COLUMN EndTime TEXT NOT NULL DEFAULT '00:00:00';",
+                        "CREATE TABLE IF NOT EXISTS FacultyTimetables (Id INTEGER PRIMARY KEY AUTOINCREMENT, FacultyId INTEGER NOT NULL, Day INTEGER NOT NULL, StartTime TEXT NOT NULL, EndTime TEXT NOT NULL, Subject TEXT NOT NULL DEFAULT '', RoomNumber TEXT NOT NULL DEFAULT '');",
+                        "CREATE INDEX IF NOT EXISTS IX_FacultyTimetables_FacultyId_Day ON FacultyTimetables (FacultyId, Day);"
                     };
 
                     foreach (var statement in sql)
