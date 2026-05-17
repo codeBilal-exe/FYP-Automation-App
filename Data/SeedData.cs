@@ -347,7 +347,10 @@ namespace FYP_AutomationSystem.Data
                         "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"StartTime\" interval NOT NULL DEFAULT '00:00:00';",
                         "ALTER TABLE \"VivaSlots\" ADD COLUMN IF NOT EXISTS \"EndTime\" interval NOT NULL DEFAULT '00:00:00';",
                         "CREATE TABLE IF NOT EXISTS \"FacultyTimetables\" (\"Id\" SERIAL PRIMARY KEY, \"FacultyId\" integer NOT NULL, \"Day\" integer NOT NULL, \"StartTime\" interval NOT NULL, \"EndTime\" interval NOT NULL, \"Subject\" text NOT NULL DEFAULT '', \"RoomNumber\" text NOT NULL DEFAULT '');",
-                        "CREATE INDEX IF NOT EXISTS \"IX_FacultyTimetables_FacultyId_Day\" ON \"FacultyTimetables\" (\"FacultyId\", \"Day\");"
+                        "CREATE INDEX IF NOT EXISTS \"IX_FacultyTimetables_FacultyId_Day\" ON \"FacultyTimetables\" (\"FacultyId\", \"Day\");",
+                        // Panel remarks
+                        "CREATE TABLE IF NOT EXISTS \"PanelRemarks\" (\"Id\" SERIAL PRIMARY KEY, \"VivaSlotId\" integer NOT NULL, \"PanelMemberId\" integer NOT NULL, \"GroupId\" integer NOT NULL, \"Remarks\" text NOT NULL DEFAULT '', \"Rating\" integer NULL, \"CreatedAt\" timestamp with time zone NOT NULL, \"UpdatedAt\" timestamp with time zone NULL);",
+                        "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PanelRemarks_VivaSlotId_PanelMemberId\" ON \"PanelRemarks\" (\"VivaSlotId\", \"PanelMemberId\");"
                     };
 
                     foreach (var statement in sql)
@@ -401,7 +404,10 @@ namespace FYP_AutomationSystem.Data
                         "ALTER TABLE VivaSlots ADD COLUMN StartTime TEXT NOT NULL DEFAULT '00:00:00';",
                         "ALTER TABLE VivaSlots ADD COLUMN EndTime TEXT NOT NULL DEFAULT '00:00:00';",
                         "CREATE TABLE IF NOT EXISTS FacultyTimetables (Id INTEGER PRIMARY KEY AUTOINCREMENT, FacultyId INTEGER NOT NULL, Day INTEGER NOT NULL, StartTime TEXT NOT NULL, EndTime TEXT NOT NULL, Subject TEXT NOT NULL DEFAULT '', RoomNumber TEXT NOT NULL DEFAULT '');",
-                        "CREATE INDEX IF NOT EXISTS IX_FacultyTimetables_FacultyId_Day ON FacultyTimetables (FacultyId, Day);"
+                        "CREATE INDEX IF NOT EXISTS IX_FacultyTimetables_FacultyId_Day ON FacultyTimetables (FacultyId, Day);",
+                        // Panel remarks
+                        "CREATE TABLE IF NOT EXISTS PanelRemarks (Id INTEGER PRIMARY KEY AUTOINCREMENT, VivaSlotId INTEGER NOT NULL, PanelMemberId INTEGER NOT NULL, GroupId INTEGER NOT NULL, Remarks TEXT NOT NULL DEFAULT '', Rating INTEGER NULL, CreatedAt TEXT NOT NULL, UpdatedAt TEXT NULL);",
+                        "CREATE UNIQUE INDEX IF NOT EXISTS IX_PanelRemarks_VivaSlotId_PanelMemberId ON PanelRemarks (VivaSlotId, PanelMemberId);"
                     };
 
                     foreach (var statement in sql)

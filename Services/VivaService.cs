@@ -497,6 +497,12 @@ namespace FYP_AutomationSystem.Services
             {
                 return await _context.VivaSlots
                     .Where(v => v.PanelMembers.Any(p => p.Id == panelMemberId))
+                    .Include(v => v.PanelMembers)
+                    .Include(v => v.Group)
+                        .ThenInclude(g => g!.Project)
+                    .Include(v => v.Group)
+                        .ThenInclude(g => g!.Members)
+                    .Include(v => v.Milestone)
                     .OrderBy(v => v.ScheduledAt)
                     .ToListAsync();
             }

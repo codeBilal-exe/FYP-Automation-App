@@ -164,6 +164,7 @@ app.MapPost("/auth/login", async (HttpContext httpContext, AuthService authServi
         FYP_AutomationSystem.Models.UserRole.Supervisor => "/supervisor/dashboard",
         FYP_AutomationSystem.Models.UserRole.Coordinator => "/coordinator/dashboard",
         FYP_AutomationSystem.Models.UserRole.Admin => "/admin/dashboard",
+        FYP_AutomationSystem.Models.UserRole.Panel => "/panel/dashboard",
         _ => "/dashboard"
     };
 

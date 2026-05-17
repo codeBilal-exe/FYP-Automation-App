@@ -34,6 +34,7 @@ namespace FYP_AutomationSystem.Data
         public DbSet<PersonalMessage> PersonalMessages { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
         public DbSet<FacultyTimetable> FacultyTimetables { get; set; }
+        public DbSet<PanelRemark> PanelRemarks { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -213,6 +214,27 @@ namespace FYP_AutomationSystem.Data
                 .OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<FacultyTimetable>()
                 .HasIndex(ft => new { ft.FacultyId, ft.Day });
+
+            modelBuilder.Entity<PanelRemark>()
+                .HasKey(pr => pr.Id);
+            modelBuilder.Entity<PanelRemark>()
+                .HasOne(pr => pr.VivaSlot)
+                .WithMany()
+                .HasForeignKey(pr => pr.VivaSlotId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PanelRemark>()
+                .HasOne(pr => pr.PanelMember)
+                .WithMany()
+                .HasForeignKey(pr => pr.PanelMemberId)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<PanelRemark>()
+                .HasOne(pr => pr.Group)
+                .WithMany()
+                .HasForeignKey(pr => pr.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PanelRemark>()
+                .HasIndex(pr => new { pr.VivaSlotId, pr.PanelMemberId })
+                .IsUnique();
 
             modelBuilder.Entity<AuditLog>()
                 .HasKey(al => al.Id);
