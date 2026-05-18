@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject NavigationManager Nav
 @inject NotificationService NotificationService
-@inject MessageService MessageService
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IJSRuntime JS
 
@@ -13,7 +13,7 @@
                     <i class="bi bi-mortarboard-fill"></i>
                     <span class="brand-text">FYP System</span>
                 </div>
-                <NavMenu Role="@_role" UnreadMessages="@_unreadMessages" />
+                <NavMenu Role="@_role" />
                 <div class="sidebar-footer">
                     <button class="btn btn-sm btn-collapse" @onclick="ToggleSidebar" title="Collapse">
                         <i class="bi @(_collapsed ? "bi-chevron-double-right" : "bi-chevron-double-left")"></i>
@@ -69,10 +69,10 @@
     private bool _collapsed;
     private string _role = "";
     private int _unread;
-    private int _unreadMessages;
     private string _pageTitle = "Dashboard";
     private CancellationTokenSource _pollCts = new();
     private int _currentUserId;
+    private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
@@ -85,7 +85,6 @@
             {
                 _currentUserId = userId;
                 _unread = await NotificationService.CountUnread(userId);
-                _unreadMessages = await MessageService.GetSidebarUnreadCount(userId);
                 _ = PollUnread(_pollCts.Token);
             }
         }
@@ -100,9 +99,8 @@
         {
             while (await timer.WaitForNextTickAsync(token))
             {
-                if (_currentUserId <= 0) continue;
+                if (_disposed || _currentUserId <= 0) continue;
                 _unread = await NotificationService.CountUnread(_currentUserId);
-                _unreadMessages = await MessageService.GetSidebarUnreadCount(_currentUserId);
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -142,6 +140,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         _pollCts.Cancel();
         _pollCts.Dispose();
         Nav.LocationChanged -= OnLocationChanged;

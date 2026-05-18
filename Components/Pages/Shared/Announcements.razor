@@ -1,0 +1,174 @@
+@page "/announcements"
+@attribute [Authorize(Roles = "Admin,Coordinator")]
+@inject NotificationService NotificationService
+@inject AuthenticationStateProvider AuthProvider
+
+<div class="page-header">
+  <div>
+    <h1>Announcements</h1>
+    <div class="page-subtitle">Send important updates directly into users' notifications.</div>
+  </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_success))
+{
+  <div class="alert alert-success">@_success</div>
+}
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="fcard announcement-composer">
+      <div class="fcard-title"><i class="bi bi-megaphone"></i> New Announcement</div>
+
+      <div class="mb-3">
+        <label class="form-label">Title</label>
+        <input class="form-control" maxlength="120" @bind="_title" @bind:event="oninput" placeholder="Important update" />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Announcement</label>
+        <textarea class="form-control" rows="7" maxlength="1200" @bind="_description" @bind:event="oninput" placeholder="Write the announcement users should see in notifications."></textarea>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label class="form-label">Send To</label>
+          <select class="form-select" @bind="_targetRole">
+            @foreach (var role in _targetRoles)
+            {
+              <option value="@role">@role</option>
+            }
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Expires In</label>
+          <select class="form-select" @bind="_expiresInDays">
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end mt-3">
+        <button class="btn btn-primary" disabled="@(_sending || !CanSend)" @onclick="Send">
+          <i class="bi bi-send me-1"></i>@(_sending ? "Sending..." : "Send Announcement")
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="fcard">
+      <div class="fcard-title"><i class="bi bi-clock-history"></i> Recent Announcements</div>
+      @if (_loading)
+      {
+        <LoadingSpinner Message="Loading announcements..." />
+      }
+      else if (!_recent.Any())
+      {
+        <div class="empty-state"><i class="bi bi-megaphone"></i>No announcements sent yet.</div>
+      }
+      else
+      {
+        @foreach (var item in _recent)
+        {
+          <div class="announcement-history-item">
+            <div class="d-flex justify-content-between gap-2">
+              <strong>@item.Title</strong>
+              <span class="fbadge warning">@item.RecipientCount sent</span>
+            </div>
+            <div class="text-muted small">@item.Description</div>
+            <div class="text-muted small">@item.CreatedAt.ToString("MMM dd, yyyy HH:mm")</div>
+          </div>
+        }
+      }
+    </div>
+  </div>
+</div>
+
+@code {
+  private readonly string[] _targetRoles = { "All", "Student", "Supervisor", "HOD", "Coordinator", "Panel", "Admin" };
+  private string _title = "";
+  private string _description = "";
+  private string _targetRole = "All";
+  private int _expiresInDays = 30;
+  private string? _error;
+  private string? _success;
+  private bool _sending;
+  private bool _loading = true;
+  private int _senderId;
+  private List<AnnouncementSummary> _recent = new();
+
+  private bool CanSend => !string.IsNullOrWhiteSpace(_title) && !string.IsNullOrWhiteSpace(_description);
+
+  protected override async Task OnInitializedAsync()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var id = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _senderId = int.TryParse(id, out var userId) ? userId : 0;
+    await LoadRecent();
+  }
+
+  private async Task Send()
+  {
+    _error = null;
+    _success = null;
+
+    if (_senderId <= 0)
+    {
+      _error = "Unable to identify the current user.";
+      return;
+    }
+
+    if (!CanSend)
+    {
+      _error = "Title and announcement text are required.";
+      return;
+    }
+
+    _sending = true;
+    var created = await NotificationService.CreateAnnouncement(_senderId, _title, _description, _targetRole, _expiresInDays);
+    _sending = false;
+
+    if (created == 0)
+    {
+      _error = "No announcement notifications were sent. Check the selected target role has active users.";
+      return;
+    }
+
+    _success = $"Announcement sent to {created} user{(created == 1 ? "" : "s")}.";
+    _title = "";
+    _description = "";
+    _targetRole = "All";
+    _expiresInDays = 30;
+    await LoadRecent();
+  }
+
+  private async Task LoadRecent()
+  {
+    _loading = true;
+    _recent = await NotificationService.GetRecentAnnouncements();
+    _loading = false;
+  }
+}
+
+<style>
+.announcement-composer textarea {
+  resize: vertical;
+}
+
+.announcement-history-item {
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.announcement-history-item:last-child {
+  border-bottom: 0;
+}
+</style>

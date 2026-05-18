@@ -65,7 +65,7 @@ On first launch the app will:
 1. Connect to your Supabase Postgres database.
 2. Create every table (`Users`, `Groups`, `Projects`, `Proposals`,
    `Milestones`, `Documents`, `Evaluations`, `RubricItems`, `RubricScores`,
-   `Notifications`, `Messages`, `VivaSlots`, `AuditLogs`,
+   `Notifications`, `VivaSlots`, `AuditLogs`,
    `PlagiarismReports`, plus the `GroupMembers` and `VivaPanelMembers`
    join tables) via `EnsureCreated()`.
 3. Seed default users, a sample group, project, milestones, proposal, and

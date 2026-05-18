@@ -4,13 +4,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FYP_AutomationSystem.Services
 {
+    public record AnnouncementSummary(string ReferenceId, string Title, string Description, DateTime CreatedAt, int RecipientCount);
+
     public class NotificationService
     {
         private readonly AppDbContext _context;
+        private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-        public NotificationService(AppDbContext context)
+        public NotificationService(AppDbContext context, IDbContextFactory<AppDbContext> contextFactory)
         {
             _context = context;
+            _contextFactory = contextFactory;
         }
 
         public async Task<Notification?> CreateNotification(
@@ -92,6 +96,85 @@ namespace FYP_AutomationSystem.Services
             return created;
         }
 
+        public async Task<int> CreateAnnouncement(
+            int senderId,
+            string title,
+            string description,
+            string targetRole,
+            int expiresInDays = 30)
+        {
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description))
+                return 0;
+
+            var sender = await _context.Users.FirstOrDefaultAsync(u => u.Id == senderId && u.IsActive);
+            if (sender == null || (sender.Role != UserRole.Admin && sender.Role != UserRole.Coordinator))
+                return 0;
+
+            var users = _context.Users.Where(u => u.IsActive && u.Id != senderId);
+            if (!string.Equals(targetRole, "All", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!Enum.TryParse<UserRole>(targetRole, true, out var parsedRole))
+                    return 0;
+
+                users = users.Where(u => u.Role == parsedRole);
+            }
+
+            var recipients = await users
+                .Select(u => new { u.Id, u.Role })
+                .ToListAsync();
+
+            if (recipients.Count == 0)
+                return 0;
+
+            var now = DateTime.UtcNow;
+            var referenceId = $"announcement-{senderId}-{now.Ticks}";
+            var expiryDays = Math.Clamp(expiresInDays, 1, 180);
+            var notifications = recipients.Select(r => new Notification
+            {
+                Title = title.Trim(),
+                Description = description.Trim(),
+                Type = NotificationType.Announcement,
+                RecipientId = r.Id,
+                RecipientRole = r.Role.ToString(),
+                EventType = "announcement",
+                ReferenceId = referenceId,
+                LinkUrl = null,
+                IsRead = false,
+                CreatedAt = now,
+                SentAt = now,
+                ExpiresAt = now.AddDays(expiryDays)
+            }).ToList();
+
+            _context.Notifications.AddRange(notifications);
+            await _context.SaveChangesAsync();
+            return notifications.Count;
+        }
+
+        public async Task<List<AnnouncementSummary>> GetRecentAnnouncements(int count = 10)
+        {
+            try
+            {
+                return await _context.Notifications
+                    .AsNoTracking()
+                    .Where(n => n.EventType == "announcement" && n.ReferenceId != null)
+                    .GroupBy(n => new { n.ReferenceId, n.Title, n.Description, n.CreatedAt })
+                    .OrderByDescending(g => g.Key.CreatedAt)
+                    .Take(count)
+                    .Select(g => new AnnouncementSummary(
+                        g.Key.ReferenceId!,
+                        g.Key.Title,
+                        g.Key.Description,
+                        g.Key.CreatedAt,
+                        g.Count()))
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Get recent announcements error: {ex.Message}");
+                return new List<AnnouncementSummary>();
+            }
+        }
+
         public async Task NotifyProposalStatusForGroup(
             int groupId,
             string title,
@@ -150,8 +233,9 @@ namespace FYP_AutomationSystem.Services
         {
             try
             {
+                await using var db = await _contextFactory.CreateDbContextAsync();
                 var now = DateTime.UtcNow;
-                return await _context.Notifications.CountAsync(n => n.RecipientId == userId && !n.IsRead && n.ExpiresAt >= now);
+                return await db.Notifications.CountAsync(n => n.RecipientId == userId && !n.IsRead && n.ExpiresAt >= now);
             }
             catch (Exception ex)
             {

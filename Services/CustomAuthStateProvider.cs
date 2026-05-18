@@ -27,25 +27,28 @@ namespace FYP_AutomationSystem.Services
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
-            var user = AuthService.CurrentUser;
             var httpUser = _httpContextAccessor.HttpContext?.User;
 
-            if (httpUser?.Identity?.IsAuthenticated == true)
+            if (httpUser?.Identity?.IsAuthenticated != true)
             {
-                var idValue = httpUser.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (int.TryParse(idValue, out var userId))
+                AuthService.CurrentUser = null;
+                return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+            }
+
+            User? user = null;
+            var idValue = httpUser.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (int.TryParse(idValue, out var userId))
+            {
+                await _authLock.WaitAsync();
+                try
                 {
-                    await _authLock.WaitAsync();
-                    try
-                    {
-                        await using var context = await _contextFactory.CreateDbContextAsync();
-                        user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
-                        AuthService.CurrentUser = user;
-                    }
-                    finally
-                    {
-                        _authLock.Release();
-                    }
+                    await using var context = await _contextFactory.CreateDbContextAsync();
+                    user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
+                    AuthService.CurrentUser = user;
+                }
+                finally
+                {
+                    _authLock.Release();
                 }
             }
 

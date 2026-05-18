@@ -32,6 +32,7 @@
     else if (Role == "Coordinator")
     {
         <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/announcements"><i class="bi bi-megaphone"></i><span>Announcements</span></NavLink>
         <NavLink class="nav-item-link" href="/coordinator/groups"><i class="bi bi-diagram-3"></i><span>Manage Groups</span></NavLink>
         <NavLink class="nav-item-link" href="/coordinator/proposals"><i class="bi bi-clipboard-check"></i><span>Proposals</span></NavLink>
         <NavLink class="nav-item-link" href="/coordinator/viva"><i class="bi bi-calendar-event"></i><span>Viva Scheduling</span></NavLink>
@@ -40,6 +41,7 @@
     else if (Role == "Admin")
     {
         <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/announcements"><i class="bi bi-megaphone"></i><span>Announcements</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/users"><i class="bi bi-person-gear"></i><span>Manage Users</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/audit"><i class="bi bi-shield-check"></i><span>Audit Logs</span></NavLink>
     }
@@ -51,34 +53,8 @@
 
     <div class="nav-divider"></div>
     <NavLink class="nav-item-link" href="/notifications"><i class="bi bi-bell"></i><span>Notifications</span></NavLink>
-    <NavLink class="nav-item-link position-relative" href="/messages">
-        <i class="bi bi-chat-dots"></i><span>Messages</span>
-        @if (UnreadMessages > 0)
-        {
-            <span class="message-dot">@UnreadMessages</span>
-        }
-    </NavLink>
 </nav>
 
 @code {
     [Parameter] public string Role { get; set; } = "";
-    [Parameter] public int UnreadMessages { get; set; }
 }
-
-<style>
-.message-dot {
-    position: absolute;
-    right: 10px;
-    top: 6px;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    background: #dc2626;
-    color: #fff;
-    font-size: .7rem;
-    line-height: 18px;
-    text-align: center;
-    padding: 0 5px;
-    font-weight: 700;
-}
-</style>

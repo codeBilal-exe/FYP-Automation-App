@@ -72,7 +72,6 @@ builder.Services.AddScoped<MilestoneService>();
 builder.Services.AddScoped<EvaluationService>();
 builder.Services.AddScoped<DocumentService>();
 builder.Services.AddScoped<NotificationService>();
-builder.Services.AddScoped<MessageService>();
 builder.Services.AddScoped<ProjectThreadService>();
 builder.Services.AddScoped<VivaService>();
 builder.Services.AddScoped<ReportService>();
@@ -104,16 +103,23 @@ using (var scope = app.Services.CreateScope())
 {
     await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync();
     await db.Database.EnsureCreatedAsync();
-    var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
-    await SeedData.InitializeAsync(db, auth);
-    var authSync = scope.ServiceProvider.GetRequiredService<SupabaseAuthSyncService>();
-    var syncResult = await authSync.SyncExistingUsersFromApp();
-    Console.WriteLine($"Supabase auth sync: created={syncResult.Created}, existing={syncResult.Existing}, failed={syncResult.Failed}");
-    if (syncResult.Errors.Count > 0)
+
+    if (builder.Configuration.GetValue<bool>("StartupTasks:SeedDemoData"))
     {
-        foreach (var err in syncResult.Errors)
+        var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
+        await SeedData.InitializeAsync(db, auth);
+    }
+
+    if (builder.Configuration.GetValue<bool>("StartupTasks:SyncSupabaseAuth"))
+    {
+        var authSync = scope.ServiceProvider.GetRequiredService<SupabaseAuthSyncService>();
+        var syncResult = await authSync.SyncExistingUsersFromApp();
+        if (syncResult.Errors.Count > 0)
         {
-            Console.WriteLine($"Supabase auth sync error: {err}");
+            foreach (var err in syncResult.Errors)
+            {
+                Console.WriteLine($"Supabase auth sync error: {err}");
+            }
         }
     }
 }
@@ -122,10 +128,10 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();

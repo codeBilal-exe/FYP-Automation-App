@@ -266,14 +266,6 @@ namespace FYP_AutomationSystem.Services
                     _context.Notifications.RemoveRange(notifications);
                 }
 
-                var directMessages = await _context.Messages
-                    .Where(m => m.SenderId == user.Id || m.RecipientId == user.Id)
-                    .ToListAsync();
-                if (directMessages.Count > 0)
-                {
-                    _context.Messages.RemoveRange(directMessages);
-                }
-
                 var evaluations = await _context.Evaluations.Where(e => e.EvaluatorId == user.Id).ToListAsync();
                 if (evaluations.Count > 0)
                 {

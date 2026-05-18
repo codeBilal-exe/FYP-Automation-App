@@ -1,5 +1,6 @@
 @page "/student/dashboard"
 @attribute [Authorize(Roles = "Student")]
+@implements IDisposable
 @inject AuthenticationStateProvider AuthProvider
 @inject AppDbContext Db
 @inject MilestoneService MilestoneService

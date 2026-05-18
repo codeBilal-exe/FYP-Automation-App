@@ -19,7 +19,6 @@ namespace FYP_AutomationSystem.Data
         public DbSet<RubricItem> RubricItems { get; set; }
         public DbSet<RubricScore> RubricScores { get; set; }
         public DbSet<Notification> Notifications { get; set; }
-        public DbSet<Message> Messages { get; set; }
         public DbSet<VivaSlot> VivaSlots { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<PlagiarismReport> PlagiarismReports { get; set; }
@@ -29,9 +28,6 @@ namespace FYP_AutomationSystem.Data
         public DbSet<ProjectTask> ProjectTasks { get; set; }
         public DbSet<TaskSubmission> TaskSubmissions { get; set; }
         public DbSet<RejectionHistory> RejectionHistories { get; set; }
-        public DbSet<GroupMessageThread> GroupMessageThreads { get; set; }
-        public DbSet<GroupMessage> GroupMessages { get; set; }
-        public DbSet<PersonalMessage> PersonalMessages { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
         public DbSet<FacultyTimetable> FacultyTimetables { get; set; }
 
@@ -169,17 +165,6 @@ namespace FYP_AutomationSystem.Data
             modelBuilder.Entity<Notification>()
                 .HasIndex(n => new { n.RecipientId, n.EventType, n.ReferenceId });
 
-            modelBuilder.Entity<Message>()
-                .HasKey(m => m.Id);
-            modelBuilder.Entity<Message>()
-                .Property(m => m.Content)
-                .IsRequired();
-            modelBuilder.Entity<Message>()
-                .HasOne(m => m.Sender)
-                .WithMany()
-                .HasForeignKey(m => m.SenderId)
-                .OnDelete(DeleteBehavior.Restrict);
-
             modelBuilder.Entity<VivaSlot>()
                 .HasKey(vs => vs.Id);
             modelBuilder.Entity<VivaSlot>()
@@ -243,12 +228,6 @@ namespace FYP_AutomationSystem.Data
                 .HasKey(s => s.Id);
             modelBuilder.Entity<RejectionHistory>()
                 .HasKey(r => r.Id);
-            modelBuilder.Entity<GroupMessageThread>()
-                .HasKey(t => t.Id);
-            modelBuilder.Entity<GroupMessage>()
-                .HasKey(m => m.Id);
-            modelBuilder.Entity<PersonalMessage>()
-                .HasKey(m => m.Id);
             modelBuilder.Entity<PasswordResetToken>()
                 .HasKey(t => t.Id);
             modelBuilder.Entity<PasswordResetToken>()

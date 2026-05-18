@@ -6,6 +6,7 @@ namespace FYP_AutomationSystem.Models
         Warning,
         Success,
         Deadline,
-        ProposalDecision
+        ProposalDecision,
+        Announcement
     }
 }

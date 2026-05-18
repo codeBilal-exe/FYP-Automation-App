@@ -1,5 +1,6 @@
 @page "/student/proposal"
 @attribute [Authorize(Roles = "Student")]
+@implements IDisposable
 @inject AppDbContext Db
 @inject ProposalService ProposalService
 @inject AuditService AuditService
