@@ -4,7 +4,8 @@
 @code {
   protected override void OnInitialized()
   {
-    var query = new Uri(Nav.Uri).Query;
-    Nav.NavigateTo($"/{query}", forceLoad: true);
+    var uri = new Uri(Nav.Uri);
+    var target = string.IsNullOrWhiteSpace(uri.Query) ? "/" : $"/{uri.Query}";
+    Nav.NavigateTo(target, forceLoad: true);
   }
 }

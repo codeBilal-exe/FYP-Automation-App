@@ -104,12 +104,6 @@ using (var scope = app.Services.CreateScope())
     await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync();
     await db.Database.EnsureCreatedAsync();
 
-    if (builder.Configuration.GetValue<bool>("StartupTasks:SeedDemoData"))
-    {
-        var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
-        await SeedData.InitializeAsync(db, auth);
-    }
-
     if (builder.Configuration.GetValue<bool>("StartupTasks:SyncSupabaseAuth"))
     {
         var authSync = scope.ServiceProvider.GetRequiredService<SupabaseAuthSyncService>();

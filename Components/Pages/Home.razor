@@ -1,23 +1,12 @@
-@page "/"
+﻿@page "/"
 @layout MainLayout
+@using FYP_AutomationSystem.Models
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 
-<section class="auth-page compact-auth-page">
+<section class="auth-page compact-auth-page signin-only-page">
   <div class="auth-ambient auth-ambient-one"></div>
   <div class="auth-ambient auth-ambient-two"></div>
-
-  <div class="auth-showcase">
-    <div class="auth-kicker"><i class="bi bi-shield-check"></i> Secure Access</div>
-    <h1>FYP Automation System</h1>
-    <p>Sign in to continue to your role-based workspace for proposals, milestones, documents, and evaluations.</p>
-
-    <ul class="auth-highlights" aria-label="platform highlights">
-      <li><i class="bi bi-check-circle-fill"></i><span>Role-based dashboards for students, supervisors, HOD, coordinator, and admin.</span></li>
-      <li><i class="bi bi-check-circle-fill"></i><span>Centralized workflow for proposal review to final viva.</span></li>
-      <li><i class="bi bi-check-circle-fill"></i><span>Built-in communication, tracking, and reporting tools.</span></li>
-    </ul>
-  </div>
 
   <div class="auth-card pro-auth-card">
     <div class="auth-logo"><i class="bi bi-mortarboard-fill"></i></div>
@@ -37,8 +26,8 @@
       <div class="mb-3">
         <label class="form-label" for="email">Email</label>
         <div class="input-icon-wrap">
-          <i class="bi bi-envelope"></i>
-          <input id="email" name="email" class="form-control" type="email" value="@_email" placeholder="you@fyp.edu"
+          <i class="bi bi-envelope field-leading-icon"></i>
+          <input id="email" name="email" class="form-control" type="email" value="@_email" placeholder="you@fyp.com"
                  autocomplete="username" required />
         </div>
       </div>
@@ -46,8 +35,8 @@
       <div class="mb-3">
         <label class="form-label" for="password">Password</label>
         <div class="input-icon-wrap">
-          <i class="bi bi-lock"></i>
-          <input id="password" name="password" type="@(_showPassword ? "text" : "password")" class="form-control password-field" placeholder="••••••••"
+          <i class="bi bi-lock field-leading-icon"></i>
+          <input id="password" name="password" type="@(_showPassword ? "text" : "password")" class="form-control password-field" placeholder="********"
                  autocomplete="current-password" required />
           <button type="button" class="password-toggle-btn" @onclick="TogglePasswordVisibility" aria-label="Toggle password visibility">
             <i class="bi @(_showPassword ? "bi-eye-slash" : "bi-eye")"></i>
@@ -70,12 +59,10 @@
 
     <div class="demo-creds mt-4">
       <div class="demo-title"><i class="bi bi-key"></i> Demo accounts</div>
-      <button type="button" class="demo-pill" data-email="admin@fyp.edu" data-password="Admin@123">Admin</button>
-      <button type="button" class="demo-pill" data-email="supervisor1@fyp.edu" data-password="Super@123">Supervisor</button>
-      <button type="button" class="demo-pill" data-email="student1@fyp.edu" data-password="Student@123">Student</button>
-      <button type="button" class="demo-pill" data-email="hod@fyp.edu" data-password="HOD@123">HOD</button>
-      <button type="button" class="demo-pill" data-email="coordinator@fyp.edu" data-password="Coord@123">Coordinator</button>
-      <button type="button" class="demo-pill" data-email="panel@fyp.edu" data-password="Panel@123">Panel</button>
+      @foreach (var cred in _demoCredentials)
+      {
+        <button type="button" class="demo-pill" data-email="@cred.Email" data-password="@cred.Password">@cred.Label</button>
+      }
     </div>
   </div>
 </section>
@@ -85,6 +72,7 @@
   private string? _info;
   private string _email = "";
   private bool _showPassword;
+  private IReadOnlyList<DemoCredential> _demoCredentials = Array.Empty<DemoCredential>();
 
   protected override async Task OnInitializedAsync()
   {
@@ -117,15 +105,135 @@
     {
       _email = email;
     }
+
+    _demoCredentials = LoadDemoCredentials();
   }
 
   private void TogglePasswordVisibility()
   {
     _showPassword = !_showPassword;
   }
+
+  private static IReadOnlyList<DemoCredential> LoadDemoCredentials()
+  {
+    var fallback = new List<DemoCredential>
+    {
+      new("Admin", "admin@fyp.com", "Admin@System"),
+      new("Coordinator", "hassan.qureshi@coordinator.fyp.com", "Coordinator@Hassan"),
+      new("HOD", "dr.kamran.ali@hod.fyp.com", "HOD@Kamran"),
+      new("Supervisor", "sara.malik@supervisor.fyp.com", "Supervisor@Sara"),
+      new("Panel Member", "adnan.malik@panel.fyp.com", "Panel@Adnan"),
+      new("Student", "ali.khan@student.fyp.com", "Student@Ali")
+    };
+
+    var csvPath = Path.Combine(AppContext.BaseDirectory, "fyp_mock_users.csv");
+    if (!File.Exists(csvPath))
+    {
+      return fallback;
+    }
+
+    var byRole = new Dictionary<UserRole, DemoCredential>();
+    foreach (var rawLine in File.ReadAllLines(csvPath).Skip(1))
+    {
+      var line = rawLine.Trim();
+      if (string.IsNullOrWhiteSpace(line))
+      {
+        continue;
+      }
+
+      var parts = line.Split(',');
+      if (parts.Length < 4)
+      {
+        continue;
+      }
+
+      var email = parts[1].Trim();
+      var password = parts[2].Trim();
+      var roleText = parts[3].Trim();
+      if (!TryMapRole(roleText, out var role) || byRole.ContainsKey(role))
+      {
+        continue;
+      }
+
+      byRole[role] = new DemoCredential(GetRoleLabel(role), email, password);
+    }
+
+    var orderedRoles = new[]
+    {
+      UserRole.Admin,
+      UserRole.Coordinator,
+      UserRole.HOD,
+      UserRole.Supervisor,
+      UserRole.Panel,
+      UserRole.Student
+    };
+
+    var results = orderedRoles
+      .Where(byRole.ContainsKey)
+      .Select(role => byRole[role])
+      .ToList();
+
+    return results.Count == orderedRoles.Length ? results : fallback;
+  }
+
+  private static bool TryMapRole(string roleText, out UserRole role)
+  {
+    switch (roleText.Trim().ToLowerInvariant())
+    {
+      case "admin":
+        role = UserRole.Admin;
+        return true;
+      case "coordinator":
+        role = UserRole.Coordinator;
+        return true;
+      case "hod":
+        role = UserRole.HOD;
+        return true;
+      case "supervisor":
+        role = UserRole.Supervisor;
+        return true;
+      case "panel":
+      case "panel member":
+        role = UserRole.Panel;
+        return true;
+      case "student":
+        role = UserRole.Student;
+        return true;
+      default:
+        role = default;
+        return false;
+    }
+  }
+
+  private static string GetRoleLabel(UserRole role) => role switch
+  {
+    UserRole.HOD => "HOD",
+    UserRole.Panel => "Panel Member",
+    _ => role.ToString()
+  };
+
+  private sealed record DemoCredential(string Label, string Email, string Password);
 }
 
 <style>
+.signin-only-page {
+  grid-template-columns: minmax(340px, 460px);
+  justify-content: center;
+}
+
+.signin-only-page .auth-card {
+  margin: 0 auto;
+}
+
+.input-icon-wrap .field-leading-icon {
+  position: absolute;
+  left: .9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  z-index: 1;
+}
+
 .password-field {
   padding-right: 2.9rem !important;
 }
@@ -139,5 +247,18 @@
   background: transparent;
   color: var(--muted);
   z-index: 2;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.password-toggle-btn i {
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
 }
 </style>
