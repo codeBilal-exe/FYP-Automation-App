@@ -86,6 +86,7 @@ window.fypSite = (function () {
     // Theme-aware dashboard charts. Reads CSS vars so colors track light/dark.
     renderDashboardCharts: (payload) => {
       if (typeof Chart === 'undefined') return;
+      payload = payload || {};
 
       function withAlpha(hex, a) {
         // Accept hex (#rrggbb / #rgb) or rgb(); produce rgba(...)
@@ -114,13 +115,15 @@ window.fypSite = (function () {
 
         // Doughnut: Projects by status
         if (payload.status) {
+          const labels = Array.isArray(payload.status.labels) ? payload.status.labels : [];
+          const values = Array.isArray(payload.status.values) ? payload.status.values : [];
           window.fypSite.drawChart('chartStatus', {
             type: 'doughnut',
             data: {
-              labels: payload.status.labels,
+              labels: labels,
               datasets: [{
-                data: payload.status.values,
-                backgroundColor: payload.status.labels.map((_, i) => palette[i % palette.length]),
+                data: values,
+                backgroundColor: labels.map((_, i) => palette[i % palette.length]),
                 borderColor: c.surface || '#fff',
                 borderWidth: 2,
                 hoverOffset: 8
@@ -139,13 +142,15 @@ window.fypSite = (function () {
 
         // Bar: Milestones / month
         if (payload.month) {
+          const labels = Array.isArray(payload.month.labels) ? payload.month.labels : [];
+          const values = Array.isArray(payload.month.values) ? payload.month.values : [];
           window.fypSite.drawChart('chartMs', {
             type: 'bar',
             data: {
-              labels: payload.month.labels,
+              labels: labels,
               datasets: [{
                 label: 'Completed',
-                data: payload.month.values,
+                data: values,
                 backgroundColor: withAlpha(accent, 0.75),
                 hoverBackgroundColor: accent,
                 borderRadius: 6,
@@ -170,6 +175,8 @@ window.fypSite = (function () {
 
         // Line: Proposal submissions trend
         if (payload.props) {
+          const labels = Array.isArray(payload.props.labels) ? payload.props.labels : [];
+          const values = Array.isArray(payload.props.values) ? payload.props.values : [];
           const cnv = document.getElementById('chartProps');
           let gradient = withAlpha(accent, 0.22);
           if (cnv) {
@@ -182,10 +189,10 @@ window.fypSite = (function () {
           window.fypSite.drawChart('chartProps', {
             type: 'line',
             data: {
-              labels: payload.props.labels,
+              labels: labels,
               datasets: [{
                 label: 'Submissions',
-                data: payload.props.values,
+                data: values,
                 borderColor: accent,
                 backgroundColor: gradient,
                 pointBackgroundColor: accent,

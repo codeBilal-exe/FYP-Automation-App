@@ -1196,6 +1196,30 @@ h3 { font-size: 1.2rem; line-height: 1.25; }
   line-height: 1.4;
 }
 
+/* Prevent text overflow in dashboards/tables/cards */
+.page-header h1,
+.page-subtitle,
+.topbar-title,
+.user-name,
+.fcard,
+.fcard-title,
+.stat-label,
+.stat-value,
+.ftable td,
+.ftable th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ftable {
+  table-layout: fixed;
+  width: 100%;
+}
+
+canvas {
+  max-width: 100% !important;
+}
+
 /* ==========================================================================
    Modal
    ========================================================================== */
@@ -1322,6 +1346,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.25rem 0; }
   .auth-card, .pro-auth-card { padding: 1.6rem 1.4rem; max-width: 100%; }
   .auth-page::after, .auth-corner-mark { display: none; }
   .page-header h1 { font-size: 1.5rem; }
+  .page-subtitle { font-size: .82rem; }
 }
 
 @media (max-width: 480px) {

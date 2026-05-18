@@ -1,13 +1,17 @@
-@page "/student/documents"
+﻿@page "/student/documents"
 @attribute [Authorize(Roles = "Student")]
 @inject AppDbContext Db
 @inject DocumentService DocumentService
+@inject AuthenticationStateProvider AuthProvider
 
 <div class="page-header">
-  <div><h1>My Documents</h1><div class="page-subtitle">Upload and manage project documents.</div></div>
+  <div><h1>My Documents</h1><div class="page-subtitle">All group documents in one place: uploads, proposal files, and milestone submissions.</div></div>
 </div>
 
-@if (_project == null) { <div class="empty-state"><i class="bi bi-inbox"></i>No project assigned.</div> }
+@if (_project == null)
+{
+  <div class="empty-state"><i class="bi bi-inbox"></i>No project assigned.</div>
+}
 else
 {
   <div class="fcard mb-3">
@@ -18,21 +22,25 @@ else
   </div>
 
   <div class="fcard">
-    <div class="fcard-title"><i class="bi bi-folder2-open"></i> Documents</div>
-    @if (!_docs.Any()) { <div class="empty-state"><i class="bi bi-file-earmark"></i>No documents yet.</div> }
+    <div class="fcard-title"><i class="bi bi-folder2-open"></i> Group Documents</div>
+    @if (!_rows.Any())
+    {
+      <div class="empty-state"><i class="bi bi-file-earmark"></i>No documents yet.</div>
+    }
     else
     {
       <table class="ftable">
-        <thead><tr><th>File</th><th>Size</th><th>Version</th><th>Uploaded</th><th></th></tr></thead>
+        <thead><tr><th>File</th><th>Source</th><th>Uploaded</th><th>By</th><th>Size</th><th></th></tr></thead>
         <tbody>
-          @foreach (var d in _docs)
+          @foreach (var row in _rows)
           {
             <tr>
-              <td><i class="bi bi-file-earmark me-2"></i>@d.FileName</td>
-              <td>@FormatSize(d.FileSizeBytes)</td>
-              <td>v@(d.Version)</td>
-              <td>@d.UploadedAt.ToString("MMM dd, yyyy")</td>
-              <td><a class="btn btn-sm btn-soft" href="/@d.FilePath.Replace("\\","/")" target="_blank"><i class="bi bi-download"></i></a></td>
+              <td><i class="bi bi-file-earmark me-2"></i>@row.FileName</td>
+              <td><span class="fbadge info">@row.Source</span></td>
+              <td>@row.UploadedAt.ToString("MMM dd, yyyy HH:mm")</td>
+              <td>@row.UploadedBy</td>
+              <td>@row.SizeLabel</td>
+              <td><a class="btn btn-sm btn-soft" href="@row.Url" target="_blank"><i class="bi bi-download"></i></a></td>
             </tr>
           }
         </tbody>
@@ -43,36 +51,125 @@ else
 
 @code {
   private Project? _project;
-  private List<Document> _docs = new();
+  private Group? _group;
+  private List<DocumentRow> _rows = new();
   private string? _msg;
+  private int _studentId;
+
+  private sealed class DocumentRow
+  {
+    public string FileName { get; set; } = "";
+    public string Source { get; set; } = "";
+    public DateTime UploadedAt { get; set; }
+    public string UploadedBy { get; set; } = "";
+    public string SizeLabel { get; set; } = "-";
+    public string Url { get; set; } = "#";
+  }
 
   protected override async Task OnInitializedAsync() => await Load();
 
   private async Task Load()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    var g = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Project), g => g.Members.Any(m => m.Id == u.Id));
-    _project = g?.Project;
-    if (_project != null) _docs = await DocumentService.GetDocumentsByProject(_project.Id);
+    _rows.Clear();
+
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var idValue = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _studentId = int.TryParse(idValue, out var userId) ? userId : 0;
+    if (_studentId <= 0)
+      return;
+
+    _group = await Db.Groups
+      .Include(g => g.Members)
+      .Include(g => g.Project)
+      .FirstOrDefaultAsync(g => g.Members.Any(m => m.Id == _studentId));
+
+    _project = _group?.Project;
+    if (_project == null || _group == null)
+      return;
+
+    var memberNames = _group.Members.ToDictionary(m => m.Id, m => m.FullName);
+
+    var projectDocs = await DocumentService.GetDocumentsByProject(_project.Id);
+    _rows.AddRange(projectDocs.Select(d => new DocumentRow
+    {
+      FileName = d.FileName,
+      Source = "Project Upload",
+      UploadedAt = d.UploadedAt,
+      UploadedBy = memberNames.TryGetValue(d.UploadedById, out var userName) ? userName : "Group Member",
+      SizeLabel = FormatSize(d.FileSizeBytes),
+      Url = NormalizePath(d.FilePath)
+    }));
+
+    var proposalDocs = await Db.Proposals
+      .Where(p => p.GroupId == _group.Id && !string.IsNullOrWhiteSpace(p.DocumentPath))
+      .OrderByDescending(p => p.DocumentUploadedAt ?? p.UpdatedAt)
+      .ToListAsync();
+
+    _rows.AddRange(proposalDocs.Select(p => new DocumentRow
+    {
+      FileName = string.IsNullOrWhiteSpace(p.DocumentName) ? $"Proposal-{p.Id}" : p.DocumentName!,
+      Source = "Proposal",
+      UploadedAt = p.DocumentUploadedAt ?? p.UpdatedAt,
+      UploadedBy = memberNames.TryGetValue(p.StudentId, out var studentName) ? studentName : "Team Lead",
+      SizeLabel = "-",
+      Url = NormalizePath(p.DocumentPath!)
+    }));
+
+    var milestoneDocs = await Db.Milestones
+      .Where(m => m.ProjectId == _project.Id && !string.IsNullOrWhiteSpace(m.SubmissionFilePath))
+      .OrderByDescending(m => m.SubmittedAt ?? m.DueDate)
+      .ToListAsync();
+
+    _rows.AddRange(milestoneDocs.Select(m => new DocumentRow
+    {
+      FileName = string.IsNullOrWhiteSpace(m.SubmissionFileName) ? m.Title : m.SubmissionFileName!,
+      Source = "Milestone Submission",
+      UploadedAt = m.SubmittedAt ?? m.DueDate,
+      UploadedBy = m.SubmittedByStudentId.HasValue && memberNames.TryGetValue(m.SubmittedByStudentId.Value, out var submitter)
+        ? submitter
+        : "Group Member",
+      SizeLabel = "-",
+      Url = NormalizePath(m.SubmissionFilePath!)
+    }));
+
+    _rows = _rows
+      .OrderByDescending(r => r.UploadedAt)
+      .ThenBy(r => r.FileName)
+      .ToList();
   }
 
   private async Task OnFileSelected(InputFileChangeEventArgs e)
   {
-    var u = AuthService.CurrentUser; if (u == null || _project == null) return;
+    if (_project == null || _studentId <= 0)
+      return;
+
     var file = e.File;
-    if (file.Size > 20 * 1024 * 1024) { _msg = "File exceeds 20 MB limit."; return; }
+    if (file.Size > 20 * 1024 * 1024)
+    {
+      _msg = "File exceeds 20 MB limit.";
+      return;
+    }
+
     using var ms = new MemoryStream();
     await file.OpenReadStream(20 * 1024 * 1024).CopyToAsync(ms);
     ms.Position = 0;
+
     var formFile = new Microsoft.AspNetCore.Http.FormFile(ms, 0, ms.Length, "file", file.Name)
     {
       Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
       ContentType = file.ContentType
     };
-    var doc = await DocumentService.UploadDocument(formFile, _project.Id, u.Id);
+
+    var doc = await DocumentService.UploadDocument(formFile, _project.Id, _studentId);
     _msg = doc != null ? "Uploaded successfully." : "Upload failed.";
     await Load();
+  }
+
+  private static string NormalizePath(string path)
+  {
+    if (string.IsNullOrWhiteSpace(path)) return "#";
+    var normalized = path.Replace("\\", "/");
+    return normalized.StartsWith("/") ? normalized : "/" + normalized;
   }
 
   private static string FormatSize(long b)

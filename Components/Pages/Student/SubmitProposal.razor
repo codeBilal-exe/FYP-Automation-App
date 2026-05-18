@@ -205,18 +205,15 @@
       _latestStatus = latest.Status;
       _existingDocumentPath = latest.DocumentPath;
       _existingDocumentName = latest.DocumentName;
-      if (latest.Status == ProposalStatus.Draft)
+      _model = new ProposalModel
       {
-        _model = new ProposalModel
-        {
-          Title = latest.Title,
-          Abstract = latest.Abstract,
-          Objectives = latest.Objectives,
-          Domain = latest.Domain,
-          Technologies = latest.Technologies,
-          GitHubUrl = latest.GitHubUrl
-        };
-      }
+        Title = latest.Title,
+        Abstract = latest.Abstract,
+        Objectives = latest.Objectives,
+        Domain = latest.Domain,
+        Technologies = latest.Technologies,
+        GitHubUrl = latest.GitHubUrl
+      };
     }
   }
 

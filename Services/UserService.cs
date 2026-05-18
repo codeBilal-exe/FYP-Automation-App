@@ -260,6 +260,18 @@ namespace FYP_AutomationSystem.Services
                     }
                 }
 
+                var facultyTimetable = await _context.FacultyTimetables.Where(ft => ft.FacultyId == user.Id).ToListAsync();
+                if (facultyTimetable.Count > 0)
+                {
+                    _context.FacultyTimetables.RemoveRange(facultyTimetable);
+                }
+
+                var panelRemarks = await _context.PanelRemarks.Where(pr => pr.PanelMemberId == user.Id).ToListAsync();
+                if (panelRemarks.Count > 0)
+                {
+                    _context.PanelRemarks.RemoveRange(panelRemarks);
+                }
+
                 var notifications = await _context.Notifications.Where(n => n.RecipientId == user.Id).ToListAsync();
                 if (notifications.Count > 0)
                 {
@@ -270,6 +282,34 @@ namespace FYP_AutomationSystem.Services
                 if (evaluations.Count > 0)
                 {
                     _context.Evaluations.RemoveRange(evaluations);
+                }
+
+                var passwordTokens = await _context.PasswordResetTokens.Where(t => t.UserId == user.Id).ToListAsync();
+                if (passwordTokens.Count > 0)
+                {
+                    _context.PasswordResetTokens.RemoveRange(passwordTokens);
+                }
+
+                var submissions = await _context.TaskSubmissions.Where(s => s.SubmittedByStudentId == user.Id).ToListAsync();
+                if (submissions.Count > 0)
+                {
+                    _context.TaskSubmissions.RemoveRange(submissions);
+                }
+
+                var rejections = await _context.RejectionHistories.Where(r => r.RejectedByUserId == user.Id).ToListAsync();
+                if (rejections.Count > 0)
+                {
+                    _context.RejectionHistories.RemoveRange(rejections);
+                }
+
+                // Legacy deployments may still have a Messages table with a SenderId FK.
+                try
+                {
+                    await _context.Database.ExecuteSqlRawAsync("DELETE FROM \"Messages\" WHERE \"SenderId\" = {0};", user.Id);
+                }
+                catch
+                {
+                    // Ignore if table doesn't exist in current deployment.
                 }
 
                 var authDelete = await _supabaseAuthSyncService.DeleteAuthUserByEmail(user.Email);
@@ -286,10 +326,33 @@ namespace FYP_AutomationSystem.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Deactivate user error: {ex.Message}");
+                try
+                {
+                    var existing = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+                    if (existing != null)
+                    {
+                        existing.IsActive = false;
+                        existing.IsLockedOut = true;
+                        existing.LockoutUntil = DateTime.UtcNow.AddYears(50);
+                        _context.Users.Update(existing);
+                        await _context.SaveChangesAsync();
+
+                        return new DeleteUserResult
+                        {
+                            Success = true,
+                            Message = "User has linked records, so hard delete was not possible. Account has been deactivated safely. Reassign dependencies, then retry delete if permanent removal is required."
+                        };
+                    }
+                }
+                catch (Exception fallbackEx)
+                {
+                    Console.WriteLine($"Fallback deactivate error: {fallbackEx.Message}");
+                }
+
                 return new DeleteUserResult
                 {
                     Success = false,
-                    Message = "Unable to delete user due to linked records. Reassign dependencies and try again."
+                    Message = "Unable to delete user due to linked records. Reassign dependencies (groups, evaluations, panel remarks, timetable, task submissions) and try again."
                 };
             }
         }

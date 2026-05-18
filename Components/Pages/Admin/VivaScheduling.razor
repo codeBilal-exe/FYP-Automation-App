@@ -15,10 +15,18 @@
 
 @* ── Scheduled slots table ── *@
 <div class="fcard mb-3">
-  <div class="fcard-title"><i class="bi bi-calendar2-week"></i> Scheduled Slots</div>
-  @if (_slots.Count == 0)
+  <div class="fcard-title d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div><i class="bi bi-calendar2-week"></i> Scheduled Slots</div>
+    <div style="width: 250px;">
+      <div class="input-group input-group-sm">
+        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search by Group..." @bind="_searchGroup" @bind:event="oninput" />
+      </div>
+    </div>
+  </div>
+  @if (!FilteredSlots.Any())
   {
-    <div class="empty-state"><i class="bi bi-calendar-x"></i>No slots scheduled yet. Click "Schedule New Slot" to begin.</div>
+    <div class="empty-state"><i class="bi bi-calendar-x"></i>No scheduled slots found.</div>
   }
   else
   {
@@ -36,7 +44,7 @@
         </tr>
       </thead>
       <tbody>
-        @foreach (var s in _slots)
+        @foreach (var s in FilteredSlots)
         {
           <tr>
             <td>@s.ScheduledAt.ToString("ddd, MMM dd yyyy")</td>
@@ -59,6 +67,10 @@
             </td>
             <td><span class="fbadge @(s.Status.ToString().ToLower())">@s.Status</span></td>
             <td>
+              @if (s.Status == VivaStatus.Scheduled)
+              {
+                <button class="btn btn-sm btn-outline-primary me-1" title="Edit" @onclick="() => EditSlot(s)"><i class="bi bi-pencil"></i></button>
+              }
               <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => DeleteSlot(s)"><i class="bi bi-trash"></i></button>
             </td>
           </tr>
@@ -120,7 +132,7 @@
 {
   <div class="modal-backdrop-c" @onclick="() => _showModal = false">
     <div class="modal-card viva-modal-wide" @onclick:stopPropagation>
-      <h5 class="mb-3"><i class="bi bi-calendar-plus me-2"></i>Schedule New Slot</h5>
+      <h5 class="mb-3"><i class="bi @(_isEditing ? "bi-pencil-square" : "bi-calendar-plus") me-2"></i>@(_isEditing ? "Edit Scheduled Slot" : "Schedule New Slot")</h5>
 
       @if (!string.IsNullOrEmpty(_error))
       {
@@ -146,7 +158,7 @@
         </div>
         <div class="viva-col">
           <label class="form-label">Group</label>
-          <select class="form-select" @bind="_newGroupId" @bind:after="OnDateOrGroupChanged">
+          <select class="form-select" @bind="_newGroupId" @bind:after="OnDateOrGroupChanged" disabled="@_isEditing">
             <option value="0">— Select Group —</option>
             @foreach (var g in _groups)
             {
@@ -244,12 +256,12 @@
 
       <div class="d-flex justify-content-end gap-2">
         <button class="btn btn-light" @onclick="() => _showModal = false">Cancel</button>
-        <button class="btn btn-primary" @onclick="CreateSlot" disabled="@_creating">
+        <button class="btn btn-primary" @onclick="SaveSlot" disabled="@_creating">
           @if (_creating)
           {
             <span class="spinner-border spinner-border-sm me-1"></span>
           }
-          Schedule Slot
+          @(_isEditing ? "Save Changes" : "Schedule Slot")
         </button>
       </div>
     </div>
@@ -261,6 +273,11 @@
   private List<VivaSlot> _slots = new();
   private List<Group> _groups = new();
   private int _timetableCount;
+  private string _searchGroup = "";
+
+  private IEnumerable<VivaSlot> FilteredSlots => string.IsNullOrWhiteSpace(_searchGroup) 
+      ? _slots 
+      : _slots.Where(s => s.Group?.GroupName != null && s.Group.GroupName.Contains(_searchGroup, StringComparison.OrdinalIgnoreCase));
 
   // New slot modal
   private bool _showModal;
@@ -275,6 +292,8 @@
   private bool _creating;
   private bool _fetchingFaculty;
   private string _error = "";
+  private bool _isEditing;
+  private int _editSlotId;
 
   // Upload
   private bool _uploading;
@@ -308,6 +327,8 @@
     _error = "";
     _creating = false;
     _fetchingFaculty = false;
+    _isEditing = false;
+    _editSlotId = 0;
   }
 
   private Task OnDateOrGroupChanged()
@@ -375,43 +396,98 @@
       _selectedPanelIds.Add(id);
   }
 
-  private async Task CreateSlot()
+  private async Task SaveSlot()
   {
     _error = "";
     if (_newGroupId == 0) { _error = "Please select a group."; return; }
     if (string.IsNullOrWhiteSpace(_newVenue)) { _error = "Please enter a venue."; return; }
-    if (_newDate.Date < DateTime.Today) { _error = "Date cannot be in the past."; return; }
+    if (_newDate.Date < DateTime.Today && !_isEditing) { _error = "Date cannot be in the past."; return; }
     if (_selectedSlot == null) { _error = "Please select one supervisor free slot."; return; }
     if (_selectedPanelIds.Count == 0) { _error = "Please assign at least one panel member."; return; }
 
     _creating = true;
 
-    var outcome = await VivaService.CreateScheduledSlot(
-        _newDate, _selectedSlot.StartTime, _selectedSlot.EndTime, _newVenue, _newGroupId, null, _newSlotType,
-        _selectedPanelIds.ToList());
-
-    if (outcome.Result != ScheduleResult.Ok || outcome.Slot == null)
+    if (_isEditing)
     {
-      _error = outcome.Message;
-
-      // If the supervisor's free state changed under our feet, re-fetch slots
-      // so the coordinator sees the corrected availability immediately.
-      if (outcome.Result == ScheduleResult.SlotNotFreeForSupervisor ||
-          outcome.Result == ScheduleResult.SupervisorHasOverlappingViva ||
-          outcome.Result == ScheduleResult.VenueDoubleBooked ||
-          outcome.Result == ScheduleResult.GroupDoubleBooked ||
-          outcome.Result == ScheduleResult.PanelMemberBusy)
+      var updated = new VivaSchedule
       {
-        await FetchSupervisorSlots();
-      }
+        SlotId = _editSlotId,
+        Date = _newDate,
+        StartTime = _selectedSlot.StartTime,
+        EndTime = _selectedSlot.EndTime,
+        Venue = _newVenue,
+        PanelMemberIds = _selectedPanelIds.ToList()
+      };
 
-      _creating = false;
-      return;
+      var outcome = await VivaService.UpdateVivaAsync(updated);
+
+      if (outcome.Result != ScheduleResult.Ok || outcome.Slot == null)
+      {
+        _error = outcome.Message;
+        if (outcome.Result == ScheduleResult.SlotNotFreeForSupervisor ||
+            outcome.Result == ScheduleResult.SupervisorHasOverlappingViva ||
+            outcome.Result == ScheduleResult.VenueDoubleBooked ||
+            outcome.Result == ScheduleResult.GroupDoubleBooked ||
+            outcome.Result == ScheduleResult.PanelMemberBusy)
+        {
+          await FetchSupervisorSlots();
+        }
+        _creating = false;
+        return;
+      }
+    }
+    else
+    {
+      var outcome = await VivaService.CreateScheduledSlot(
+          _newDate, _selectedSlot.StartTime, _selectedSlot.EndTime, _newVenue, _newGroupId, null, _newSlotType,
+          _selectedPanelIds.ToList());
+
+      if (outcome.Result != ScheduleResult.Ok || outcome.Slot == null)
+      {
+        _error = outcome.Message;
+        if (outcome.Result == ScheduleResult.SlotNotFreeForSupervisor ||
+            outcome.Result == ScheduleResult.SupervisorHasOverlappingViva ||
+            outcome.Result == ScheduleResult.VenueDoubleBooked ||
+            outcome.Result == ScheduleResult.GroupDoubleBooked ||
+            outcome.Result == ScheduleResult.PanelMemberBusy)
+        {
+          await FetchSupervisorSlots();
+        }
+        _creating = false;
+        return;
+      }
     }
 
     _showModal = false;
     _creating = false;
     await Load();
+  }
+
+  private async Task EditSlot(VivaSlot s)
+  {
+    _isEditing = true;
+    _editSlotId = s.Id;
+    _newDate = s.ScheduledAt.ToLocalTime().Date;
+    _newSlotType = s.SlotType;
+    _newGroupId = s.GroupId ?? 0;
+    _newVenue = s.Venue;
+    
+    _showModal = true;
+    _error = "";
+    _creating = false;
+    _fetchingFaculty = false;
+    
+    await FetchSupervisorSlots();
+    
+    if (_slotOptions != null)
+    {
+        var matchingSlot = _slotOptions.FirstOrDefault(opt => opt.StartTime == s.StartTime && opt.EndTime == s.EndTime);
+        if (matchingSlot != null)
+        {
+            SelectSlot(matchingSlot);
+            _selectedPanelIds = s.PanelMembers.Select(p => p.Id).ToHashSet();
+        }
+    }
   }
 
   private async Task DeleteSlot(VivaSlot s)

@@ -829,6 +829,149 @@ namespace FYP_AutomationSystem.Services
         }
 
         /// <summary>
+        /// Updates an existing SCHEDULED viva slot, re-running all availability checks.
+        /// Returns a structured outcome identical to CreateScheduledSlot.
+        /// Only slots still in Scheduled status can be edited.
+        /// </summary>
+        public async Task<ScheduleSlotOutcome> UpdateVivaAsync(VivaSchedule updated)
+        {
+            try
+            {
+                if (updated.SlotId <= 0)
+                    return Fail(ScheduleResult.GroupNotFound, "Invalid slot ID.");
+
+                var existing = await _context.VivaSlots
+                    .Include(v => v.PanelMembers)
+                    .Include(v => v.Group)
+                        .ThenInclude(g => g!.Supervisor)
+                    .FirstOrDefaultAsync(v => v.Id == updated.SlotId);
+
+                if (existing == null)
+                    return Fail(ScheduleResult.GroupNotFound, "Viva slot not found.");
+
+                if (existing.Status != VivaStatus.Scheduled)
+                    return Fail(ScheduleResult.InvalidTimeRange, "Only slots with status 'Scheduled' can be edited.");
+
+                // ── Basic validations ──────────────────────────────────────
+                if (updated.EndTime <= updated.StartTime)
+                    return Fail(ScheduleResult.InvalidTimeRange, "End time must be after start time.");
+                if (string.IsNullOrWhiteSpace(updated.Venue))
+                    return Fail(ScheduleResult.VenueRequired, "Venue is required.");
+                if (updated.StartTime < DefaultDayStart || updated.EndTime > DefaultDayEnd)
+                    return Fail(ScheduleResult.InvalidTimeRange,
+                        $"Slots must be within {DefaultDayStart:hh\\:mm}–{DefaultDayEnd:hh\\:mm}.");
+
+                var cleanVenue = updated.Venue.Trim();
+                var dateStart = ToUtcDate(updated.Date);
+                if (dateStart < ToUtcDate(DateTime.UtcNow))
+                    return Fail(ScheduleResult.DateInPast, "Date cannot be in the past.");
+
+                // ── Load group & supervisor ────────────────────────────────
+                var group = await _context.Groups
+                    .Include(g => g.Members)
+                    .Include(g => g.Supervisor)
+                    .FirstOrDefaultAsync(g => g.Id == existing.GroupId);
+                if (group == null)
+                    return Fail(ScheduleResult.GroupNotFound, "Group not found.");
+                if (group.SupervisorId <= 0 || group.Supervisor == null || !group.Supervisor.IsActive)
+                    return Fail(ScheduleResult.SupervisorMissing, "This group has no active supervisor assigned.");
+
+                // ── Day slots (exclude this slot itself from conflict checks) ─
+                var dateEnd = dateStart.AddDays(1);
+                var dayOfWeek = dateStart.DayOfWeek;
+
+                var daySlots = await _context.VivaSlots
+                    .Include(v => v.PanelMembers)
+                    .Include(v => v.Group)
+                    .Where(v => v.ScheduledAt >= dateStart &&
+                                v.ScheduledAt < dateEnd &&
+                                v.Status == VivaStatus.Scheduled &&
+                                v.Id != existing.Id)              // exclude self
+                    .ToListAsync();
+
+                // Venue conflict
+                if (daySlots.Any(v =>
+                        string.Equals(v.Venue.Trim(), cleanVenue, StringComparison.OrdinalIgnoreCase) &&
+                        Overlaps(v.StartTime, v.EndTime, updated.StartTime, updated.EndTime)))
+                    return Fail(ScheduleResult.VenueDoubleBooked,
+                        $"Venue '{cleanVenue}' is already booked for an overlapping time.");
+
+                // Group double-book
+                if (daySlots.Any(v =>
+                        v.GroupId == group.Id &&
+                        Overlaps(v.StartTime, v.EndTime, updated.StartTime, updated.EndTime)))
+                    return Fail(ScheduleResult.GroupDoubleBooked,
+                        "This group already has another slot in an overlapping time.");
+
+                // ── Timetable ──────────────────────────────────────────────
+                var timetableRows = await _context.FacultyTimetables
+                    .Where(ft => ft.Day == dayOfWeek)
+                    .ToListAsync();
+
+                if (HasTimetableConflict(group.SupervisorId, updated.StartTime, updated.EndTime, timetableRows))
+                    return Fail(ScheduleResult.SlotNotFreeForSupervisor,
+                        $"Supervisor {group.Supervisor.FullName} has a class scheduled in this time window.");
+
+                if (HasOverlappingVivaCommitment(group.SupervisorId, updated.StartTime, updated.EndTime, daySlots))
+                    return Fail(ScheduleResult.SupervisorHasOverlappingViva,
+                        $"Supervisor {group.Supervisor.FullName} is already booked for another viva in this time window.");
+
+                // ── Panel members ──────────────────────────────────────────
+                var uniquePanelIds = updated.PanelMemberIds
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .ToList();
+                if (uniquePanelIds.Count == 0)
+                    return Fail(ScheduleResult.NoPanelSelected, "Please assign at least one panel member.");
+
+                var panelUsers = await _context.Users
+                    .Where(u => u.IsActive &&
+                                SchedulingFacultyRoles.Contains(u.Role) &&
+                                uniquePanelIds.Contains(u.Id))
+                    .ToListAsync();
+                if (panelUsers.Count != uniquePanelIds.Count)
+                    return Fail(ScheduleResult.PanelInvalid,
+                        "One or more selected panel members are inactive or invalid.");
+
+                panelUsers = panelUsers.Where(u => u.Id != group.SupervisorId).ToList();
+                if (panelUsers.Count == 0)
+                    return Fail(ScheduleResult.NoPanelSelected,
+                        "Panel must contain at least one member other than the supervisor.");
+
+                var busyPanel = panelUsers.FirstOrDefault(u =>
+                    HasTimetableConflict(u.Id, updated.StartTime, updated.EndTime, timetableRows) ||
+                    HasOverlappingVivaCommitment(u.Id, updated.StartTime, updated.EndTime, daySlots));
+                if (busyPanel != null)
+                    return Fail(ScheduleResult.PanelMemberBusy,
+                        $"Panel member {busyPanel.FullName} is not free in this time window.");
+
+                // ── Apply updates ──────────────────────────────────────────
+                var scheduledAt = DateTime.SpecifyKind(dateStart + updated.StartTime, DateTimeKind.Utc);
+
+                existing.ScheduledAt = scheduledAt;
+                existing.StartTime   = updated.StartTime;
+                existing.EndTime     = updated.EndTime;
+                existing.Venue       = cleanVenue;
+
+                // Atomically replace panel members
+                existing.PanelMembers.Clear();
+                await _context.SaveChangesAsync();          // flush clear first
+                foreach (var u in panelUsers)
+                    existing.PanelMembers.Add(u);
+
+                _context.VivaSlots.Update(existing);
+                await _context.SaveChangesAsync();
+
+                return new ScheduleSlotOutcome(ScheduleResult.Ok, existing, "Viva updated successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"UpdateVivaAsync error: {ex.Message}");
+                return Fail(ScheduleResult.UnknownError, $"Unexpected error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Deletes a viva slot
         /// </summary>
         public async Task<bool> DeleteVivaSlot(int id)
@@ -997,4 +1140,18 @@ namespace FYP_AutomationSystem.Services
         public string? Subject { get; set; }
         public string? RoomNumber { get; set; }
     }
+
+    /// <summary>
+    /// DTO carrying all fields required to update an existing viva slot.
+    /// </summary>
+    public sealed class VivaSchedule
+    {
+        public int SlotId { get; init; }
+        public DateTime Date { get; init; }
+        public TimeSpan StartTime { get; init; }
+        public TimeSpan EndTime { get; init; }
+        public string Venue { get; init; } = string.Empty;
+        public List<int> PanelMemberIds { get; init; } = new();
+    }
 }
+

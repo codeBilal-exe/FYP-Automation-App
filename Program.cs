@@ -67,6 +67,7 @@ builder.Services.AddHttpClient<GitHubService>();
 // Application services
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<GroupService>();
 builder.Services.AddScoped<ProposalService>();
 builder.Services.AddScoped<MilestoneService>();
 builder.Services.AddScoped<EvaluationService>();
@@ -103,6 +104,17 @@ using (var scope = app.Services.CreateScope())
 {
     await using var db = await scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync();
     await db.Database.EnsureCreatedAsync();
+
+    // Add RepoLink column to Groups table if it doesn't exist (safe to run repeatedly)
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            @"ALTER TABLE ""Groups"" ADD COLUMN IF NOT EXISTS ""RepoLink"" text;");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"RepoLink migration note: {ex.Message}");
+    }
 
     if (builder.Configuration.GetValue<bool>("StartupTasks:SyncSupabaseAuth"))
     {

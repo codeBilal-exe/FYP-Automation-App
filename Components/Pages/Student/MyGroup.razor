@@ -1,8 +1,19 @@
 @page "/student/group"
 @attribute [Authorize(Roles = "Student")]
 @inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.EntityFrameworkCore
 
 <div class="page-header"><div><h1>My Group</h1><div class="page-subtitle">Your project group and supervisor.</div></div></div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+  <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_msg))
+{
+  <div class="alert alert-success">@_msg</div>
+}
 
 @if (_group == null) { <div class="empty-state"><i class="bi bi-people"></i>You are not in a group yet.</div> }
 else
@@ -17,8 +28,33 @@ else
             <div><strong>Project:</strong> @_group.Project.Title</div>
             <div class="text-muted small">@_group.Project.Description</div>
             <div class="small mt-1"><span class="fbadge active">@_group.Project.Status</span></div>
+
+            <div class="mt-2">
+              <strong>GitHub Repository:</strong>
+              @if (!string.IsNullOrWhiteSpace(_normalizedGitHubUrl))
+              {
+                <a class="ms-1" href="@_normalizedGitHubUrl" target="_blank" rel="noopener noreferrer">@_normalizedGitHubUrl</a>
+              }
+              else
+              {
+                <span class="small text-muted ms-1">Not set yet.</span>
+              }
+            </div>
           </div>
         }
+
+        @if (_isGroupLead)
+        {
+          <div class="fcard mb-3" style="padding:1rem;">
+            <div class="fcard-title mb-2"><i class="bi bi-github"></i> Update GitHub Link</div>
+            <div class="small text-muted mb-2">As team lead, you can update your group project repository link.</div>
+            <div class="d-flex flex-wrap gap-2">
+              <InputText class="form-control" style="max-width:520px" @bind-Value="_githubUrlInput" placeholder="https://github.com/owner/repo" />
+              <button class="btn btn-primary" @onclick="SaveGitHubLink" disabled="@_savingLink">Save Link</button>
+            </div>
+          </div>
+        }
+
         <h6 class="text-muted text-uppercase small mt-3">Members</h6>
         @foreach (var m in _group.Members)
         {
@@ -52,15 +88,133 @@ else
 
 @code {
   private Group? _group;
+  private bool _isGroupLead;
+  private int _currentUserId;
+  private string? _githubUrlInput;
+  private string? _normalizedGitHubUrl;
+  private string? _msg;
+  private string? _error;
+  private bool _savingLink;
+
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    _group = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-      .FirstOrDefaultAsync(Db.Groups.Include(g => g.Members).Include(g => g.Supervisor).Include(g => g.Project),
-        g => g.Members.Any(m => m.Id == u.Id));
+    await Load();
   }
-  private static string Initials(string n) {
+
+  private async Task Load()
+  {
+    _msg = null;
+    _error = null;
+
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var idValue = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    _currentUserId = int.TryParse(idValue, out var userId) ? userId : 0;
+    if (_currentUserId <= 0)
+      return;
+
+    _group = await Db.Groups
+      .Include(g => g.Members)
+      .Include(g => g.Supervisor)
+      .Include(g => g.Project)
+      .FirstOrDefaultAsync(g => g.Members.Any(m => m.Id == _currentUserId));
+
+    if (_group == null)
+      return;
+
+    _isGroupLead = _group.GroupLeadId == _currentUserId;
+
+    var latestProposal = await Db.Proposals
+      .AsNoTracking()
+      .Where(p => p.GroupId == _group.Id)
+      .OrderByDescending(p => p.UpdatedAt)
+      .ThenByDescending(p => p.SubmittedAt)
+      .FirstOrDefaultAsync();
+
+    var preferredLink = !string.IsNullOrWhiteSpace(latestProposal?.GitHubUrl)
+      ? latestProposal!.GitHubUrl
+      : _group.Project?.GitHubUrl;
+
+    _normalizedGitHubUrl = NormalizeGitHubUrl(preferredLink);
+    _githubUrlInput = preferredLink;
+  }
+
+  private async Task SaveGitHubLink()
+  {
+    if (_group == null || !_isGroupLead || _currentUserId <= 0)
+    {
+      _error = "Only the team lead can update the GitHub link.";
+      return;
+    }
+
+    if (_savingLink)
+      return;
+
+    _savingLink = true;
+    _msg = null;
+    _error = null;
+
+    try
+    {
+      var normalized = NormalizeGitHubUrl(_githubUrlInput);
+
+      var latestProposal = await Db.Proposals
+        .Where(p => p.GroupId == _group.Id)
+        .OrderByDescending(p => p.UpdatedAt)
+        .ThenByDescending(p => p.SubmittedAt)
+        .FirstOrDefaultAsync();
+
+      if (latestProposal != null)
+      {
+        latestProposal.GitHubUrl = normalized;
+        latestProposal.UpdatedAt = DateTime.UtcNow;
+      }
+
+      var project = await Db.Projects.FirstOrDefaultAsync(p => p.GroupId == _group.Id);
+      if (project != null)
+      {
+        project.GitHubUrl = normalized;
+      }
+
+      if (latestProposal == null && project == null)
+      {
+        _error = "No proposal or project found for this group to update.";
+        return;
+      }
+
+      await Db.SaveChangesAsync();
+      _normalizedGitHubUrl = normalized;
+      _githubUrlInput = normalized;
+      _msg = "GitHub repository link updated successfully.";
+    }
+    catch (Exception ex)
+    {
+      _error = $"Unable to update GitHub link: {ex.Message}";
+    }
+    finally
+    {
+      _savingLink = false;
+    }
+  }
+
+  private static string Initials(string n)
+  {
     var p = n.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-    return p.Length == 1 ? p[0].Substring(0,1).ToUpper() : (p[0][0].ToString()+p[^1][0].ToString()).ToUpper();
+    return p.Length == 1 ? p[0].Substring(0, 1).ToUpper() : (p[0][0].ToString() + p[^1][0].ToString()).ToUpper();
+  }
+
+  private static string? NormalizeGitHubUrl(string? url)
+  {
+    if (string.IsNullOrWhiteSpace(url))
+      return null;
+
+    var value = url.Trim();
+    if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+      return value;
+
+    if (value.Contains("github.com", StringComparison.OrdinalIgnoreCase))
+      return $"https://{value.TrimStart('/')}";
+
+    return $"https://github.com/{value.TrimStart('/')}";
   }
 }

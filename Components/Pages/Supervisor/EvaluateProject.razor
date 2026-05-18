@@ -1,25 +1,40 @@
-@page "/supervisor/evaluate"
+﻿@page "/supervisor/evaluate"
 @attribute [Authorize(Roles = "Supervisor,Panel,HOD,Admin")]
 @inject AppDbContext Db
 @inject EvaluationService EvaluationService
 @inject AuditService AuditService
+@inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
-<div class="page-header"><div><h1>Evaluate Projects</h1><div class="page-subtitle">Score projects against the rubric.</div></div></div>
+<div class="page-header"><div><h1>Evaluate Projects</h1><div class="page-subtitle">Score projects against rubric after milestone progress.</div></div></div>
 
 <div class="row g-3">
   <div class="col-md-4">
     <div class="fcard">
-      <div class="fcard-title"><i class="bi bi-list"></i> Projects</div>
-      @foreach (var p in _projects)
+      <div class="fcard-title"><i class="bi bi-list-check"></i> Evaluation Targets</div>
+      @if (!_targets.Any())
       {
-        <button class="btn w-100 text-start mb-1 @(p.Id == _selected?.Id ? "btn-soft" : "btn-light")"
-                @onclick="() => Select(p)">@p.Title</button>
+        <div class="text-muted small">No projects available for evaluation yet.</div>
+      }
+      else
+      {
+        @foreach (var t in _targets)
+        {
+          <button class="btn w-100 text-start mb-2 @(t.Project.Id == _selected?.Id ? "btn-soft" : "btn-light")" @onclick="() => Select(t.Project)">
+            <div class="fw-semibold">@t.Project.Title</div>
+            <div class="small text-muted">Group: @t.GroupName</div>
+            <div class="small text-muted">Milestones: @t.CompletedMilestones / @t.TotalMilestones completed</div>
+          </button>
+        }
       }
     </div>
   </div>
+
   <div class="col-md-8">
-    @if (_selected == null) { <div class="empty-state"><i class="bi bi-arrow-left-circle"></i>Select a project to evaluate.</div> }
+    @if (_selected == null)
+    {
+      <div class="empty-state"><i class="bi bi-arrow-left-circle"></i>Select a project to evaluate.</div>
+    }
     else
     {
       <div class="fcard">
@@ -27,6 +42,7 @@
           <div><strong>@_selected.Title</strong><div class="text-muted small">@_selected.Description</div></div>
           @if (_evaluation?.IsLocked == true) { <span class="fbadge completed">Locked</span> }
         </div>
+
         <table class="ftable mb-3">
           <thead><tr><th>Criterion</th><th>Max</th><th>Score</th></tr></thead>
           <tbody>
@@ -45,14 +61,17 @@
             <tr><td colspan="2" class="text-end fw-semibold">Total</td><td><strong>@_scores.Values.Sum() / @_rubric.Sum(r => r.MaxMarks)</strong></td></tr>
           </tfoot>
         </table>
+
         <div class="mb-3">
           <label class="form-label">Feedback</label>
           <textarea class="form-control" rows="3" @bind="_feedback" disabled="@(_evaluation?.IsLocked == true)"></textarea>
         </div>
+
         <div class="d-flex gap-2">
           <button class="btn btn-soft" @onclick="Save" disabled="@(_evaluation?.IsLocked == true)">Save Draft</button>
           <button class="btn btn-primary" @onclick="LockEval" disabled="@(_evaluation?.IsLocked == true)">Lock & Submit</button>
         </div>
+
         @if (!string.IsNullOrEmpty(_msg)) { <div class="alert alert-success mt-3 mb-0">@_msg</div> }
       </div>
     }
@@ -62,33 +81,93 @@
 @code {
   private List<Project> _projects = new();
   private List<RubricItem> _rubric = new();
+  private List<EvaluationTargetVm> _targets = new();
   private Project? _selected;
   private Evaluation? _evaluation;
   private Dictionary<int, decimal> _scores = new();
   private string _feedback = "";
   private string? _msg;
+  private User? _currentUser;
+
+  private sealed class EvaluationTargetVm
+  {
+    public Project Project { get; set; } = new();
+    public string GroupName { get; set; } = "Unknown Group";
+    public int TotalMilestones { get; set; }
+    public int CompletedMilestones { get; set; }
+  }
 
   protected override async Task OnInitializedAsync()
   {
-    var u = AuthService.CurrentUser; if (u == null) return;
-    if (u.Role == UserRole.Supervisor)
-      _projects = await Db.Projects.Include(p => p.Group).Where(p => p.Group != null && p.Group.SupervisorId == u.Id).ToListAsync();
-    else
-      _projects = await Db.Projects.ToListAsync();
-    _rubric = await Db.RubricItems.ToListAsync();
+    _currentUser = await ResolveCurrentUser();
+    if (_currentUser == null)
+      return;
+
+    _rubric = await Db.RubricItems.AsNoTracking().OrderBy(r => r.Id).ToListAsync();
+    await LoadTargets();
+  }
+
+  private async Task LoadTargets()
+  {
+    if (_currentUser == null)
+      return;
+
+    if (_currentUser.Role == UserRole.Supervisor)
+    {
+      var groups = await Db.Groups
+        .Include(g => g.Project)
+        .Where(g => g.SupervisorId == _currentUser.Id && g.Project != null)
+        .ToListAsync();
+
+      _projects = groups.Select(g => g.Project!).ToList();
+
+      var projectIds = _projects.Select(p => p.Id).ToList();
+      var milestones = await Db.Milestones
+        .Where(m => projectIds.Contains(m.ProjectId))
+        .ToListAsync();
+
+      _targets = _projects
+        .Select(p => new EvaluationTargetVm
+        {
+          Project = p,
+          GroupName = groups.First(g => g.Project!.Id == p.Id).GroupName,
+          TotalMilestones = milestones.Count(m => m.ProjectId == p.Id),
+          CompletedMilestones = milestones.Count(m => m.ProjectId == p.Id && m.Status == MilestoneStatus.Completed)
+        })
+        .OrderByDescending(t => t.CompletedMilestones)
+        .ThenBy(t => t.Project.Title)
+        .ToList();
+
+      return;
+    }
+
+    _projects = await Db.Projects.Include(p => p.Group).OrderBy(p => p.Title).ToListAsync();
+    var allProjectIds = _projects.Select(p => p.Id).ToList();
+    var allMilestones = await Db.Milestones.Where(m => allProjectIds.Contains(m.ProjectId)).ToListAsync();
+    _targets = _projects.Select(p => new EvaluationTargetVm
+    {
+      Project = p,
+      GroupName = p.Group?.GroupName ?? "Unknown Group",
+      TotalMilestones = allMilestones.Count(m => m.ProjectId == p.Id),
+      CompletedMilestones = allMilestones.Count(m => m.ProjectId == p.Id && m.Status == MilestoneStatus.Completed)
+    }).ToList();
   }
 
   private async Task Select(Project p)
   {
-    _selected = p; _msg = null;
-    var u = AuthService.CurrentUser!;
+    _selected = p;
+    _msg = null;
+    if (_currentUser == null) return;
+
     _evaluation = await Db.Evaluations
       .Include(e => e.RubricScores)
-      .FirstOrDefaultAsync(e => e.ProjectId == p.Id && e.EvaluatorId == u.Id);
+      .FirstOrDefaultAsync(e => e.ProjectId == p.Id && e.EvaluatorId == _currentUser.Id);
+
     if (_evaluation == null)
     {
-      _evaluation = await EvaluationService.CreateEvaluation(p.Id, u.Id);
+      _evaluation = await EvaluationService.CreateEvaluation(p.Id, _currentUser.Id);
     }
+
     _scores = _evaluation?.RubricScores.ToDictionary(rs => rs.RubricItemId, rs => rs.ObtainedMarks) ?? new();
     _feedback = _evaluation?.Feedback ?? "";
   }
@@ -113,12 +192,21 @@
 
   private async Task LockEval()
   {
-    if (_evaluation == null) return;
+    if (_evaluation == null || _currentUser == null) return;
     await Save();
     await EvaluationService.LockEvaluation(_evaluation.Id);
-    var u = AuthService.CurrentUser!;
-    await AuditService.LogActionAsync(u.Id, "EvaluationLock", $"Eval#{_evaluation.Id}");
+    await AuditService.LogActionAsync(_currentUser.Id, "EvaluationLock", $"Eval#{_evaluation.Id}");
     _msg = "Evaluation locked.";
     _evaluation = await Db.Evaluations.Include(e => e.RubricScores).FirstAsync(e => e.Id == _evaluation.Id);
+  }
+
+  private async Task<User?> ResolveCurrentUser()
+  {
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var idValue = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(idValue, out var userId))
+      return null;
+
+    return await Db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId && u.IsActive);
   }
 }

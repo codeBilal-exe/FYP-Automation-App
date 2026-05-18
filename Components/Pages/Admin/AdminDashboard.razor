@@ -4,10 +4,14 @@
 @inject AppDbContext Db
 @inject ReportService ReportService
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
 @using Microsoft.EntityFrameworkCore
 
 <div class="page-header">
-  <div><h1>Admin Dashboard</h1><div class="page-subtitle">System overview and key metrics.</div></div>
+  <div>
+    <h1>@_dashboardTitle</h1>
+    <div class="page-subtitle">@_dashboardSubtitle</div>
+  </div>
   <button class="btn btn-soft" @onclick="RefreshDashboard" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
@@ -50,9 +54,12 @@ else
   private Dictionary<string,int> _byStatus = new();
   private Dictionary<string,int> _byMonth = new();
   private Dictionary<string,int> _props = new();
+  private string _dashboardTitle = "Dashboard";
+  private string _dashboardSubtitle = "System overview and key metrics.";
 
   protected override async Task OnInitializedAsync()
   {
+    await ResolveDashboardHeader();
     await RefreshDashboard();
   }
 
@@ -101,5 +108,20 @@ else
     });
 
     _chartsPending = false;
+  }
+
+  private async Task ResolveDashboardHeader()
+  {
+    var authState = await AuthProvider.GetAuthenticationStateAsync();
+    var role = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
+    if (string.Equals(role, "Coordinator", StringComparison.OrdinalIgnoreCase))
+    {
+      _dashboardTitle = "Coordinator Dashboard";
+      _dashboardSubtitle = "Program coordination overview and key metrics.";
+      return;
+    }
+
+    _dashboardTitle = "Admin Dashboard";
+    _dashboardSubtitle = "System overview and key metrics.";
   }
 }

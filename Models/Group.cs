@@ -12,6 +12,7 @@ namespace FYP_AutomationSystem.Models
         public decimal? FinalGrade { get; set; }
         public string? LetterGrade { get; set; }
         public bool IsFinalGradeConfirmed { get; set; }
+        public string? RepoLink { get; set; }
 
         // Navigation properties
         public User? Supervisor { get; set; }

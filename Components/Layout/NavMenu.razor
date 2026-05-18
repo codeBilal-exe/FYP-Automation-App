@@ -1,7 +1,7 @@
 <nav class="sidebar-nav">
     @if (Role == "Student")
     {
-        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/student/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/student/proposal"><i class="bi bi-file-earmark-text"></i><span>Submit Proposal</span></NavLink>
         <NavLink class="nav-item-link" href="/student/milestones"><i class="bi bi-flag"></i><span>My Milestones</span></NavLink>
         <NavLink class="nav-item-link" href="/student/documents"><i class="bi bi-folder2-open"></i><span>My Documents</span></NavLink>
@@ -23,7 +23,7 @@
         <AuthorizeView Roles="HOD">
             <Authorized>
                 <NavLink class="nav-item-link" href="/hod/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
-                <NavLink class="nav-item-link" href="/hod/review-proposals"><i class="bi bi-hourglass-split"></i><span>Pending Proposals</span></NavLink>
+                <NavLink class="nav-item-link" href="/hod/proposals"><i class="bi bi-hourglass-split"></i><span>Pending Proposals</span></NavLink>
                 <NavLink class="nav-item-link" href="/hod/rejections"><i class="bi bi-clock-history"></i><span>Rejection History</span></NavLink>
                 <NavLink class="nav-item-link" href="/hod/reports"><i class="bi bi-bar-chart"></i><span>Reports</span></NavLink>
             </Authorized>
@@ -31,7 +31,7 @@
     }
     else if (Role == "Coordinator")
     {
-        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/coordinator/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/announcements"><i class="bi bi-megaphone"></i><span>Announcements</span></NavLink>
         <NavLink class="nav-item-link" href="/coordinator/groups"><i class="bi bi-diagram-3"></i><span>Manage Groups</span></NavLink>
         <NavLink class="nav-item-link" href="/coordinator/proposals"><i class="bi bi-clipboard-check"></i><span>Proposals</span></NavLink>
@@ -40,7 +40,7 @@
     }
     else if (Role == "Admin")
     {
-        <NavLink class="nav-item-link" href="/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
+        <NavLink class="nav-item-link" href="/admin/dashboard"><i class="bi bi-speedometer2"></i><span>Dashboard</span></NavLink>
         <NavLink class="nav-item-link" href="/announcements"><i class="bi bi-megaphone"></i><span>Announcements</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/users"><i class="bi bi-person-gear"></i><span>Manage Users</span></NavLink>
         <NavLink class="nav-item-link" href="/admin/audit"><i class="bi bi-shield-check"></i><span>Audit Logs</span></NavLink>
