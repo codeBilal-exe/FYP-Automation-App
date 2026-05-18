@@ -7,10 +7,12 @@ namespace FYP_AutomationSystem.Services
     public class VivaService
     {
         private readonly AppDbContext _context;
+        private readonly NotificationService _notificationService;
 
-        public VivaService(AppDbContext context)
+        public VivaService(AppDbContext context, NotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -60,20 +62,27 @@ namespace FYP_AutomationSystem.Services
             try
             {
                 var group = await _context.Groups
+                    .Include(g => g.Members)
                     .Include(g => g.Project)
                     .FirstOrDefaultAsync(g => g.Id == groupId);
                 if (group == null) return null;
 
-                var projectId = group.Project?.Id ?? 0;
-                if (projectId == 0) return null;
+                var project = await EnsureProjectForGroupAsync(group);
+                if (project == null) return null;
 
                 var scheduledAt = date.Date + startTime;
+
+                if (!milestoneId.HasValue || milestoneId.Value <= 0)
+                {
+                    var slotMilestone = await EnsureMilestoneForScheduledSlotAsync(project.Id, slotType, scheduledAt, venue);
+                    milestoneId = slotMilestone?.Id;
+                }
 
                 var vivaSlot = new VivaSlot
                 {
                     ScheduledAt = scheduledAt,
                     Venue = venue,
-                    ProjectId = projectId,
+                    ProjectId = project.Id,
                     GroupId = groupId,
                     MilestoneId = milestoneId,
                     SlotType = slotType,
@@ -104,6 +113,27 @@ namespace FYP_AutomationSystem.Services
                     await _context.SaveChangesAsync();
                 }
 
+                if (group.Members.Count > 0)
+                {
+                    var slotName = slotType switch
+                    {
+                        SlotType.Viva => "Viva",
+                        SlotType.Presentation => "Presentation",
+                        SlotType.Evaluation => "Evaluation",
+                        SlotType.DocumentSubmission => "Document Submission",
+                        _ => "Slot"
+                    };
+
+                    await _notificationService.CreateNotificationsForUsers(
+                        group.Members.Select(m => m.Id),
+                        $"{slotName} Scheduled",
+                        $"{slotName} scheduled on {scheduledAt:yyyy-MM-dd} at {startTime:hh\\:mm} in {venue}.",
+                        NotificationType.Deadline,
+                        "slot_scheduled",
+                        vivaSlot.Id.ToString(),
+                        "/student/milestones");
+                }
+
                 return vivaSlot;
             }
             catch (Exception ex)
@@ -111,6 +141,77 @@ namespace FYP_AutomationSystem.Services
                 Console.WriteLine($"Create scheduled slot error: {ex.Message}");
                 return null;
             }
+        }
+
+        private async Task<Project?> EnsureProjectForGroupAsync(Group group)
+        {
+            if (group.Project != null)
+            {
+                return group.Project;
+            }
+
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.GroupId == group.Id);
+            if (project != null)
+            {
+                return project;
+            }
+
+            var approvedProposal = await _context.Proposals
+                .Where(p => p.GroupId == group.Id && p.Status == ProposalStatus.CoordinatorApproved)
+                .OrderByDescending(p => p.CoordinatorApprovedAt ?? p.UpdatedAt)
+                .FirstOrDefaultAsync();
+
+            project = new Project
+            {
+                GroupId = group.Id,
+                Title = string.IsNullOrWhiteSpace(approvedProposal?.Title)
+                    ? $"{group.GroupName} Project"
+                    : approvedProposal!.Title.Trim(),
+                Description = string.IsNullOrWhiteSpace(approvedProposal?.Abstract)
+                    ? "Project created automatically during scheduling."
+                    : approvedProposal!.Abstract.Trim(),
+                GitHubUrl = approvedProposal?.GitHubUrl?.Trim(),
+                Status = approvedProposal != null ? ProjectStatus.Active : ProjectStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Projects.Add(project);
+            await _context.SaveChangesAsync();
+            return project;
+        }
+
+        private async Task<Milestone?> EnsureMilestoneForScheduledSlotAsync(int projectId, SlotType slotType, DateTime scheduledAt, string venue)
+        {
+            var title = slotType switch
+            {
+                SlotType.Viva => $"Scheduled Viva - {scheduledAt:dd MMM yyyy}",
+                SlotType.Presentation => $"Scheduled Presentation - {scheduledAt:dd MMM yyyy}",
+                SlotType.Evaluation => $"Scheduled Evaluation - {scheduledAt:dd MMM yyyy}",
+                SlotType.DocumentSubmission => $"Scheduled Document Submission - {scheduledAt:dd MMM yyyy}",
+                _ => $"Scheduled Slot - {scheduledAt:dd MMM yyyy}"
+            };
+
+            var existing = await _context.Milestones
+                .Where(m => m.ProjectId == projectId && m.Title == title && m.DueDate == scheduledAt)
+                .FirstOrDefaultAsync();
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            var milestone = new Milestone
+            {
+                Title = title,
+                Description = $"{slotType} scheduled at {venue}.",
+                DueDate = scheduledAt,
+                ProjectId = projectId,
+                Status = scheduledAt <= DateTime.UtcNow ? MilestoneStatus.InProgress : MilestoneStatus.Pending,
+                ProgressPercent = 0
+            };
+
+            _context.Milestones.Add(milestone);
+            await _context.SaveChangesAsync();
+            return milestone;
         }
 
         /// <summary>

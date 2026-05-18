@@ -155,6 +155,7 @@
             <option value="@SlotType.Viva">Viva</option>
             <option value="@SlotType.Presentation">Presentation</option>
             <option value="@SlotType.Evaluation">Evaluation</option>
+            <option value="@SlotType.DocumentSubmission">Document Submission</option>
           </select>
         </div>
         <div class="viva-col">
@@ -344,7 +345,7 @@
 
     if (result == null)
     {
-      _error = "Failed to create slot. Make sure the group has a project assigned.";
+      _error = "Failed to create slot. Please check selected group, time, and panel assignment.";
       _creating = false;
       return;
     }
@@ -496,6 +497,7 @@
     SlotType.Viva => "info",
     SlotType.Presentation => "warning",
     SlotType.Evaluation => "success",
+    SlotType.DocumentSubmission => "active",
     _ => "info"
   };
 }

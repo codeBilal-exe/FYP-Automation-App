@@ -28,6 +28,16 @@
   <div class="col-lg-7">
     <div class="fcard">
       <div class="fcard-title"><i class="bi bi-file-earmark-plus"></i> Proposal Form</div>
+      @if (!_isGroupLead)
+      {
+        <div class="alert alert-info">
+          Only the team lead can submit or edit the proposal.
+          @if (!string.IsNullOrWhiteSpace(_groupLeadName))
+          {
+            <span> Team lead: <strong>@_groupLeadName</strong>.</span>
+          }
+        </div>
+      }
       <EditForm Model="_model" OnValidSubmit="Submit" OnInvalidSubmit="OnInvalidSubmit" FormName="proposal-form">
         <DataAnnotationsValidator />
         <ValidationSummary />
@@ -52,8 +62,8 @@
         </div>
 
         <div class="d-flex flex-wrap gap-2">
-          <button class="btn btn-light" type="button" @onclick="SaveDraft">Save as Draft</button>
-          <button class="btn btn-primary" type="submit" disabled="@_saving">
+          <button class="btn btn-light" type="button" @onclick="SaveDraft" disabled="@(!_isGroupLead || _saving)">Save as Draft</button>
+          <button class="btn btn-primary" type="submit" disabled="@(!_isGroupLead || _saving)">
             @if (_saving)
             {
               <span>Submitting...</span>
@@ -63,7 +73,7 @@
               <span>Submit to Supervisor</span>
             }
           </button>
-          <button class="btn btn-outline-danger" type="button" @onclick="() => _showDiscardConfirm = true">Discard Draft</button>
+          <button class="btn btn-outline-danger" type="button" @onclick="() => _showDiscardConfirm = true" disabled="@(!_isGroupLead || _saving)">Discard Draft</button>
         </div>
       </EditForm>
 
@@ -147,6 +157,8 @@
   private string? _error;
   private ProposalStatus _latestStatus = ProposalStatus.Draft;
   private int _groupId;
+  private bool _isGroupLead;
+  private string? _groupLeadName;
   private IBrowserFile? _selectedFile;
   private string? _selectedFileName;
   private string? _existingDocumentPath;
@@ -172,10 +184,13 @@
       return;
     }
 
-    _groupId = await Db.Groups
-      .Where(g => g.Members.Any(m => m.Id == userId))
-      .Select(g => g.Id)
-      .FirstOrDefaultAsync();
+    var group = await Db.Groups
+      .Include(g => g.Members)
+      .FirstOrDefaultAsync(g => g.Members.Any(m => m.Id == userId));
+
+    _groupId = group?.Id ?? 0;
+    _isGroupLead = group?.GroupLeadId == userId;
+    _groupLeadName = group?.Members.FirstOrDefault(m => m.Id == group.GroupLeadId)?.FullName;
 
     if (_groupId <= 0)
     {
@@ -211,6 +226,12 @@
 
   private async Task SaveAs(ProposalStatus status)
   {
+    if (!_isGroupLead)
+    {
+      _error = "Only the team lead can submit or edit the proposal.";
+      return;
+    }
+
     if (_saving) return;
     _saving = true;
     _msg = null;
@@ -305,6 +326,12 @@
 
   private async Task DiscardDraft()
   {
+    if (!_isGroupLead)
+    {
+      _error = "Only the team lead can discard the draft proposal.";
+      return;
+    }
+
     _showDiscardConfirm = false;
     _msg = null;
     _error = null;

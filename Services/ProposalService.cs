@@ -160,6 +160,13 @@ namespace FYP_AutomationSystem.Services
             if (!group.Members.Any(m => m.Id == studentId))
                 return (false, "You are not part of this group.", null);
 
+            var isTeamLead = group.GroupLeadId.HasValue && group.GroupLeadId.Value == studentId;
+            if (!group.GroupLeadId.HasValue)
+                return (false, "Your group does not have a team lead assigned yet. Ask coordinator/admin to assign one.", null);
+
+            if (!isTeamLead)
+                return (false, "Only the team lead can submit or edit the group proposal.", null);
+
             var now = DateTime.UtcNow;
             var existingDraft = await _context.Proposals
                 .Where(p => p.GroupId == payload.GroupId && p.Status == ProposalStatus.Draft)
@@ -358,12 +365,9 @@ namespace FYP_AutomationSystem.Services
                 proposal.CoordinatorApprovedAt = DateTime.UtcNow;
                 proposal.ReviewerComments = comments;
 
-                var project = await _context.Projects.FirstOrDefaultAsync(p => p.GroupId == proposal.GroupId);
-                if (project != null)
-                {
-                    project.Status = ProjectStatus.Active;
-                    _context.Projects.Update(project);
-                }
+                var project = await EnsureProjectFromProposalAsync(proposal);
+                project.Status = ProjectStatus.Active;
+                _context.Projects.Update(project);
 
                 await _threadService.EnsureThreadForApprovedProposalAsync(proposal);
 
@@ -461,6 +465,36 @@ namespace FYP_AutomationSystem.Services
             }
 
             return proposal;
+        }
+
+        private async Task<Project> EnsureProjectFromProposalAsync(Proposal proposal)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.GroupId == proposal.GroupId);
+            if (project != null)
+            {
+                project.Title = string.IsNullOrWhiteSpace(proposal.Title) ? project.Title : proposal.Title.Trim();
+                project.Description = string.IsNullOrWhiteSpace(proposal.Abstract)
+                    ? (string.IsNullOrWhiteSpace(project.Description) ? "Project created from approved proposal." : project.Description)
+                    : proposal.Abstract.Trim();
+                project.GitHubUrl = string.IsNullOrWhiteSpace(proposal.GitHubUrl) ? project.GitHubUrl : proposal.GitHubUrl.Trim();
+                return project;
+            }
+
+            project = new Project
+            {
+                GroupId = proposal.GroupId,
+                Title = string.IsNullOrWhiteSpace(proposal.Title) ? "Approved Group Project" : proposal.Title.Trim(),
+                Description = string.IsNullOrWhiteSpace(proposal.Abstract)
+                    ? "Project created automatically from approved proposal."
+                    : proposal.Abstract.Trim(),
+                GitHubUrl = proposal.GitHubUrl?.Trim(),
+                Status = ProjectStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Projects.Add(project);
+            await _context.SaveChangesAsync();
+            return project;
         }
     }
 }

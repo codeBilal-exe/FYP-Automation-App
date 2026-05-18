@@ -91,12 +91,18 @@ namespace FYP_AutomationSystem.Services
                 return null;
             }
 
+            var approvedProposal = await _context.Proposals
+                .Where(p => p.GroupId == groupId && p.Status == ProposalStatus.CoordinatorApproved)
+                .OrderByDescending(p => p.CoordinatorApprovedAt ?? p.UpdatedAt)
+                .FirstOrDefaultAsync();
+
             project = new Project
             {
                 GroupId = groupId,
-                Title = $"{group.GroupName} Project",
-                Description = "Project auto-created from milestone assignment.",
-                Status = ProjectStatus.Pending,
+                Title = string.IsNullOrWhiteSpace(approvedProposal?.Title) ? $"{group.GroupName} Project" : approvedProposal!.Title.Trim(),
+                Description = string.IsNullOrWhiteSpace(approvedProposal?.Abstract) ? "Project auto-created from milestone assignment." : approvedProposal!.Abstract.Trim(),
+                GitHubUrl = approvedProposal?.GitHubUrl?.Trim(),
+                Status = approvedProposal != null ? ProjectStatus.Active : ProjectStatus.Pending,
                 CreatedAt = DateTime.UtcNow
             };
 

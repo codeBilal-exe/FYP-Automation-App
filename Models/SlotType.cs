@@ -4,6 +4,7 @@ namespace FYP_AutomationSystem.Models
     {
         Viva,
         Presentation,
-        Evaluation
+        Evaluation,
+        DocumentSubmission
     }
 }
