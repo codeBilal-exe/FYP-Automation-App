@@ -1,0 +1,139 @@
+@page "/panel/schedule"
+@attribute [Authorize(Roles = "Panel")]
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+@inject VivaService VivaService
+@using Microsoft.EntityFrameworkCore
+
+<div class="page-header">
+  <div><h1>My Schedule</h1><div class="page-subtitle">Your upcoming viva and presentation sessions.</div></div>
+  <button class="btn btn-soft" @onclick="Refresh" disabled="@_loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+</div>
+
+@if (_loading)
+{
+  <LoadingSpinner Message="Loading schedule…" />
+}
+else
+{
+  <!-- Simple filter -->
+  <div class="fcard mb-3">
+    <div class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Type</label>
+        <select class="form-select form-select-sm" @bind="_filterType">
+          <option value="All">All Types</option>
+          <option value="Viva">Viva</option>
+          <option value="Presentation">Presentation</option>
+          <option value="Evaluation">Evaluation</option>
+        </select>
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <span class="badge bg-secondary">@FilteredSlots.Count() upcoming</span>
+      </div>
+    </div>
+  </div>
+
+  @if (!FilteredSlots.Any())
+  {
+    <div class="fcard text-muted text-center py-5">
+      <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+      No upcoming sessions found.
+    </div>
+  }
+  else
+  {
+    <div class="table-responsive">
+      <table class="table table-hover fcard mb-0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time Slot</th>
+            <th>Type</th>
+            <th>Group</th>
+            <th>Project</th>
+            <th>Venue</th>
+            <th>Panel Members</th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var slot in FilteredSlots)
+          {
+            <tr>
+              <td><strong>@slot.ScheduledAt.ToString("dd MMM yyyy")</strong><br/><small class="text-muted">@slot.ScheduledAt.ToString("dddd")</small></td>
+              <td>@slot.StartTime.ToString(@"hh\:mm") – @slot.EndTime.ToString(@"hh\:mm")</td>
+              <td>
+                @{
+                  var typeClass = slot.SlotType switch
+                  {
+                    SlotType.Viva => "bg-primary",
+                    SlotType.Presentation => "bg-info",
+                    SlotType.Evaluation => "bg-warning text-dark",
+                    _ => "bg-secondary"
+                  };
+                }
+                <span class="badge @typeClass">@slot.SlotType</span>
+              </td>
+              <td>@(slot.Group?.GroupName ?? "—")</td>
+              <td>
+                @if (slot.Group?.Project != null)
+                {
+                  <span title="@slot.Group.Project.Description">@slot.Group.Project.Title</span>
+                }
+                else
+                {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+              <td>@slot.Venue</td>
+              <td>
+                @if (slot.PanelMembers?.Any() == true)
+                {
+                  @foreach (var pm in slot.PanelMembers)
+                  {
+                    <span class="badge bg-light text-dark me-1 mb-1" title="@pm.Email">@pm.FullName</span>
+                  }
+                }
+                else
+                {
+                  <span class="text-muted">None</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}
+
+@code {
+  private bool _loading = true;
+  private int _panelId;
+  private List<VivaSlot> _upcomingSlots = new();
+  private string _filterType = "All";
+
+  private IEnumerable<VivaSlot> FilteredSlots => _upcomingSlots.Where(s =>
+  {
+    if (_filterType != "All" && s.SlotType.ToString() != _filterType) return false;
+    return true;
+  });
+
+  protected override async Task OnInitializedAsync() => await Refresh();
+
+  private async Task Refresh()
+  {
+    _loading = true;
+    var auth = await AuthProvider.GetAuthenticationStateAsync();
+    var idStr = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    if (!int.TryParse(idStr, out _panelId)) return;
+
+    var allSlots = await VivaService.GetVivaSlotsForPanelMember(_panelId);
+    _upcomingSlots = allSlots
+        .Where(s => s.ScheduledAt > DateTime.UtcNow && s.Status == VivaStatus.Scheduled)
+        .OrderBy(s => s.ScheduledAt)
+        .ToList();
+
+    _loading = false;
+  }
+}
