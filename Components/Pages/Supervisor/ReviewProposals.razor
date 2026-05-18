@@ -1,6 +1,7 @@
 @page "/supervisor/proposals"
 @page "/coordinator/proposals"
-@attribute [Authorize(Roles = "Supervisor,Coordinator")]
+@page "/hod/review-proposals"
+@attribute [Authorize(Roles = "Supervisor,Coordinator,HOD")]
 @inject ProposalService ProposalService
 @inject AuditService AuditService
 @inject AppDbContext Db

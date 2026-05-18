@@ -8,6 +8,9 @@ namespace FYP_AutomationSystem.Services
     {
         private readonly AppDbContext _context;
         private readonly NotificationService _notificationService;
+        private static readonly UserRole[] SchedulingFacultyRoles = [UserRole.Supervisor, UserRole.Panel];
+        private static readonly TimeSpan DefaultDayStart = new(8, 0, 0);
+        private static readonly TimeSpan DefaultDayEnd = new(17, 0, 0);
 
         public VivaService(AppDbContext context, NotificationService notificationService)
         {
@@ -47,9 +50,10 @@ namespace FYP_AutomationSystem.Services
         }
 
         /// <summary>
-        /// Creates an enhanced viva slot with group, time slot, and panel assignment
+        /// Creates an enhanced viva slot with group, time slot, and panel assignment.
+        /// Returns a structured outcome so the UI can show the exact reason on rejection.
         /// </summary>
-        public async Task<VivaSlot?> CreateScheduledSlot(
+        public async Task<ScheduleSlotOutcome> CreateScheduledSlot(
             DateTime date,
             TimeSpan startTime,
             TimeSpan endTime,
@@ -61,16 +65,111 @@ namespace FYP_AutomationSystem.Services
         {
             try
             {
+                if (endTime <= startTime)
+                    return Fail(ScheduleResult.InvalidTimeRange, "End time must be after start time.");
+                if (string.IsNullOrWhiteSpace(venue))
+                    return Fail(ScheduleResult.VenueRequired, "Venue is required.");
+                if (startTime < DefaultDayStart || endTime > DefaultDayEnd)
+                    return Fail(ScheduleResult.InvalidTimeRange, $"Slots must be within {DefaultDayStart:hh\\:mm}–{DefaultDayEnd:hh\\:mm}.");
+
                 var group = await _context.Groups
                     .Include(g => g.Members)
                     .Include(g => g.Project)
+                    .Include(g => g.Supervisor)
                     .FirstOrDefaultAsync(g => g.Id == groupId);
-                if (group == null) return null;
+                if (group == null)
+                    return Fail(ScheduleResult.GroupNotFound, "Selected group was not found.");
+                if (group.SupervisorId <= 0 || group.Supervisor == null || !group.Supervisor.IsActive)
+                    return Fail(ScheduleResult.SupervisorMissing, "This group has no active supervisor assigned.");
+
+                var cleanVenue = venue.Trim();
+                var dateStart = ToUtcDate(date);
+                if (dateStart < ToUtcDate(DateTime.UtcNow))
+                    return Fail(ScheduleResult.DateInPast, "Date cannot be in the past.");
+
+                var dateEnd = dateStart.AddDays(1);
+                var dayOfWeek = dateStart.DayOfWeek;
+
+                var daySlots = await _context.VivaSlots
+                    .Include(v => v.PanelMembers)
+                    .Include(v => v.Group)
+                    .Where(v => v.ScheduledAt >= dateStart &&
+                                v.ScheduledAt < dateEnd &&
+                                v.Status == VivaStatus.Scheduled)
+                    .ToListAsync();
+
+                // Venue must be unique for the same overlapping time range.
+                if (daySlots.Any(v =>
+                        string.Equals(v.Venue.Trim(), cleanVenue, StringComparison.OrdinalIgnoreCase) &&
+                        Overlaps(v.StartTime, v.EndTime, startTime, endTime)))
+                {
+                    return Fail(ScheduleResult.VenueDoubleBooked,
+                        $"Venue '{cleanVenue}' is already booked for an overlapping time.");
+                }
+
+                // The same group cannot have overlapping slots.
+                if (daySlots.Any(v =>
+                        v.GroupId == groupId &&
+                        Overlaps(v.StartTime, v.EndTime, startTime, endTime)))
+                {
+                    return Fail(ScheduleResult.GroupDoubleBooked,
+                        "This group already has another slot in an overlapping time.");
+                }
+
+                var timetableRows = await _context.FacultyTimetables
+                    .Where(ft => ft.Day == dayOfWeek)
+                    .ToListAsync();
+
+                // SOURCE OF TRUTH: supervisor must be free per FacultyTimetables AND VivaSlots.
+                if (HasTimetableConflict(group.SupervisorId, startTime, endTime, timetableRows))
+                {
+                    return Fail(ScheduleResult.SlotNotFreeForSupervisor,
+                        $"Supervisor {group.Supervisor.FullName} has a class scheduled in this time window.");
+                }
+                if (HasOverlappingVivaCommitment(group.SupervisorId, startTime, endTime, daySlots))
+                {
+                    return Fail(ScheduleResult.SupervisorHasOverlappingViva,
+                        $"Supervisor {group.Supervisor.FullName} is already booked for another viva in this time window.");
+                }
+
+                var uniquePanelIds = panelMemberIds
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .ToList();
+                if (uniquePanelIds.Count == 0)
+                    return Fail(ScheduleResult.NoPanelSelected, "Please assign at least one panel member.");
+
+                // Panel options are restricted to supervisors and panel members.
+                var panelUsers = await _context.Users
+                    .Where(u => u.IsActive &&
+                                SchedulingFacultyRoles.Contains(u.Role) &&
+                                uniquePanelIds.Contains(u.Id))
+                    .ToListAsync();
+                if (panelUsers.Count != uniquePanelIds.Count)
+                    return Fail(ScheduleResult.PanelInvalid, "One or more selected panel members are inactive or invalid.");
+
+                // Group supervisor is mandatory attendee; avoid adding duplicate as panel member.
+                panelUsers = panelUsers
+                    .Where(u => u.Id != group.SupervisorId)
+                    .ToList();
+                if (panelUsers.Count == 0)
+                    return Fail(ScheduleResult.NoPanelSelected, "Panel must contain at least one member other than the supervisor.");
+
+                // No panel member can be busy in timetable or overlapping viva commitments.
+                var firstBusyPanel = panelUsers.FirstOrDefault(u =>
+                    HasTimetableConflict(u.Id, startTime, endTime, timetableRows) ||
+                    HasOverlappingVivaCommitment(u.Id, startTime, endTime, daySlots));
+                if (firstBusyPanel != null)
+                {
+                    return Fail(ScheduleResult.PanelMemberBusy,
+                        $"Panel member {firstBusyPanel.FullName} is not free in this time window.");
+                }
 
                 var project = await EnsureProjectForGroupAsync(group);
-                if (project == null) return null;
+                if (project == null)
+                    return Fail(ScheduleResult.ProjectCreateFailed, "Could not create or attach a project for this group.");
 
-                var scheduledAt = date.Date + startTime;
+                var scheduledAt = DateTime.SpecifyKind(dateStart + startTime, DateTimeKind.Utc);
 
                 if (!milestoneId.HasValue || milestoneId.Value <= 0)
                 {
@@ -81,7 +180,7 @@ namespace FYP_AutomationSystem.Services
                 var vivaSlot = new VivaSlot
                 {
                     ScheduledAt = scheduledAt,
-                    Venue = venue,
+                    Venue = cleanVenue,
                     ProjectId = project.Id,
                     GroupId = groupId,
                     MilestoneId = milestoneId,
@@ -96,17 +195,13 @@ namespace FYP_AutomationSystem.Services
                 await _context.SaveChangesAsync();
 
                 // Assign panel members
-                if (panelMemberIds.Count > 0)
+                if (panelUsers.Count > 0)
                 {
                     var slot = await _context.VivaSlots
                         .Include(v => v.PanelMembers)
                         .FirstAsync(v => v.Id == vivaSlot.Id);
 
-                    var users = await _context.Users
-                        .Where(u => panelMemberIds.Contains(u.Id))
-                        .ToListAsync();
-
-                    foreach (var u in users)
+                    foreach (var u in panelUsers)
                     {
                         slot.PanelMembers.Add(u);
                     }
@@ -134,13 +229,122 @@ namespace FYP_AutomationSystem.Services
                         "/student/milestones");
                 }
 
-                return vivaSlot;
+                return new ScheduleSlotOutcome(ScheduleResult.Ok, vivaSlot, "Slot scheduled.");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Create scheduled slot error: {ex.Message}");
-                return null;
+                return Fail(ScheduleResult.UnknownError, $"Unexpected error: {ex.Message}");
             }
+        }
+
+        private static ScheduleSlotOutcome Fail(ScheduleResult result, string message)
+            => new(result, null, message);
+
+        /// <summary>
+        /// Returns slot-sized windows where the GROUP'S SUPERVISOR is completely free
+        /// for the given date, derived directly from FacultyTimetables and existing
+        /// VivaSlots. For each such window, also lists panel/supervisor candidates
+        /// that are simultaneously free.
+        /// </summary>
+        public async Task<List<SupervisorSlotAvailability>> GetSupervisorBasedAvailabilityForGroupDay(
+            int groupId,
+            DateTime date,
+            int slotMinutes = 30)
+        {
+            if (groupId <= 0 || slotMinutes <= 0) return new List<SupervisorSlotAvailability>();
+
+            var group = await _context.Groups
+                .Include(g => g.Supervisor)
+                .FirstOrDefaultAsync(g => g.Id == groupId);
+            if (group == null || group.SupervisorId <= 0 || group.Supervisor == null || !group.Supervisor.IsActive)
+                return new List<SupervisorSlotAvailability>();
+
+            var dateStart = ToUtcDate(date);
+            var dateEnd = dateStart.AddDays(1);
+            var day = dateStart.DayOfWeek;
+
+            // Authoritative source: supervisor's class timetable for this weekday.
+            var supervisorTimetable = await _context.FacultyTimetables
+                .Where(ft => ft.Day == day && ft.FacultyId == group.SupervisorId)
+                .ToListAsync();
+
+            // Full timetable for the day (used later when computing panel availability).
+            var allDayTimetable = await _context.FacultyTimetables
+                .Where(ft => ft.Day == day)
+                .ToListAsync();
+
+            // Already-scheduled vivas on the date — count as busy for everyone attending.
+            var daySlots = await _context.VivaSlots
+                .Include(v => v.PanelMembers)
+                .Include(v => v.Group)
+                .Where(v => v.ScheduledAt >= dateStart &&
+                            v.ScheduledAt < dateEnd &&
+                            v.Status == VivaStatus.Scheduled)
+                .ToListAsync();
+
+            // Build the supervisor's BUSY intervals (timetable + their viva commitments).
+            var supervisorBusy = new List<(TimeSpan Start, TimeSpan End)>();
+            foreach (var ft in supervisorTimetable)
+            {
+                if (ft.EndTime > ft.StartTime)
+                    supervisorBusy.Add((ft.StartTime, ft.EndTime));
+            }
+            foreach (var v in daySlots)
+            {
+                if (v.EndTime <= v.StartTime) continue;
+                var attending = v.Group?.SupervisorId == group.SupervisorId
+                                || v.PanelMembers.Any(p => p.Id == group.SupervisorId);
+                if (attending)
+                    supervisorBusy.Add((v.StartTime, v.EndTime));
+            }
+
+            // Subtract busy from the working window to get true FREE intervals.
+            var freeWindows = ComputeFreeIntervals(DefaultDayStart, DefaultDayEnd, supervisorBusy);
+
+            // Candidate panel users (everyone except the supervisor; restricted to faculty roles).
+            var candidateFaculty = await _context.Users
+                .Where(u => u.IsActive && SchedulingFacultyRoles.Contains(u.Role) && u.Id != group.SupervisorId)
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            // Emit fixed-duration slots strictly INSIDE each free window (no partial overlap).
+            var duration = TimeSpan.FromMinutes(slotMinutes);
+            var result = new List<SupervisorSlotAvailability>();
+
+            foreach (var win in freeWindows)
+            {
+                var cursor = win.Start;
+                while (cursor + duration <= win.End)
+                {
+                    var start = cursor;
+                    var end = cursor + duration;
+
+                    // Defensive cross-check (cheap): supervisor must be free per source-of-truth.
+                    if (HasTimetableConflict(group.SupervisorId, start, end, allDayTimetable) ||
+                        HasOverlappingVivaCommitment(group.SupervisorId, start, end, daySlots))
+                    {
+                        cursor = end;
+                        continue;
+                    }
+
+                    var availablePanel = candidateFaculty
+                        .Where(f => !HasTimetableConflict(f.Id, start, end, allDayTimetable)
+                                 && !HasOverlappingVivaCommitment(f.Id, start, end, daySlots))
+                        .ToList();
+
+                    result.Add(new SupervisorSlotAvailability
+                    {
+                        StartTime = start,
+                        EndTime = end,
+                        AvailablePanelMembers = availablePanel
+                    });
+
+                    cursor = end;
+                }
+            }
+
+            return result;
         }
 
         private async Task<Project?> EnsureProjectForGroupAsync(Group group)
@@ -271,11 +475,12 @@ namespace FYP_AutomationSystem.Services
             {
                 try
                 {
-                    var dateStart = date.Value.Date;
+                    var dateStart = ToUtcDate(date.Value);
                     var dateEnd = dateStart.AddDays(1);
 
                     var existingSlots = await _context.VivaSlots
                         .Include(v => v.PanelMembers)
+                        .Include(v => v.Group)
                         .Where(v => v.ScheduledAt >= dateStart &&
                                     v.ScheduledAt < dateEnd &&
                                     v.Status == VivaStatus.Scheduled)
@@ -283,7 +488,16 @@ namespace FYP_AutomationSystem.Services
 
                     busyInViva = existingSlots
                         .Where(v => v.StartTime < endTime && v.EndTime > startTime)
-                        .SelectMany(v => v.PanelMembers.Select(p => p.Id))
+                        .SelectMany(v =>
+                        {
+                            var ids = v.PanelMembers.Select(p => p.Id).ToList();
+                            if (v.Group?.SupervisorId > 0)
+                            {
+                                ids.Add(v.Group.SupervisorId);
+                            }
+
+                            return ids;
+                        })
                         .Distinct()
                         .ToHashSet();
                 }
@@ -662,6 +876,113 @@ namespace FYP_AutomationSystem.Services
                 return false;
             }
         }
+
+        private static bool Overlaps(TimeSpan aStart, TimeSpan aEnd, TimeSpan bStart, TimeSpan bEnd)
+            => aStart < bEnd && aEnd > bStart;
+
+        private static DateTime ToUtcDate(DateTime value)
+        {
+            var d = value.Date;
+            return d.Kind == DateTimeKind.Utc
+                ? d
+                : DateTime.SpecifyKind(d, DateTimeKind.Utc);
+        }
+
+        private static bool HasTimetableConflict(
+            int facultyId,
+            TimeSpan startTime,
+            TimeSpan endTime,
+            IEnumerable<FacultyTimetable> timetableRows)
+            => timetableRows.Any(ft =>
+                ft.FacultyId == facultyId &&
+                Overlaps(ft.StartTime, ft.EndTime, startTime, endTime));
+
+        private static bool HasOverlappingVivaCommitment(
+            int facultyId,
+            TimeSpan startTime,
+            TimeSpan endTime,
+            IEnumerable<VivaSlot> daySlots)
+            => daySlots.Any(v =>
+                Overlaps(v.StartTime, v.EndTime, startTime, endTime) &&
+                (v.PanelMembers.Any(p => p.Id == facultyId) || v.Group?.SupervisorId == facultyId));
+
+        /// <summary>
+        /// Subtracts a set of busy intervals from [windowStart, windowEnd] and returns
+        /// the resulting free intervals in chronological order. Handles overlap/merge.
+        /// </summary>
+        private static List<(TimeSpan Start, TimeSpan End)> ComputeFreeIntervals(
+            TimeSpan windowStart,
+            TimeSpan windowEnd,
+            IEnumerable<(TimeSpan Start, TimeSpan End)> busy)
+        {
+            // Clamp busy intervals into the window, drop empties/inverted.
+            var clamped = busy
+                .Where(b => b.End > windowStart && b.Start < windowEnd && b.End > b.Start)
+                .Select(b => (
+                    Start: b.Start < windowStart ? windowStart : b.Start,
+                    End:   b.End   > windowEnd   ? windowEnd   : b.End))
+                .OrderBy(b => b.Start)
+                .ThenBy(b => b.End)
+                .ToList();
+
+            // Merge overlaps/adjacent.
+            var merged = new List<(TimeSpan Start, TimeSpan End)>();
+            foreach (var iv in clamped)
+            {
+                if (merged.Count == 0 || iv.Start > merged[^1].End)
+                {
+                    merged.Add(iv);
+                }
+                else
+                {
+                    var last = merged[^1];
+                    merged[^1] = (last.Start, iv.End > last.End ? iv.End : last.End);
+                }
+            }
+
+            // Walk the window, emitting the gaps.
+            var free = new List<(TimeSpan Start, TimeSpan End)>();
+            var cursor = windowStart;
+            foreach (var iv in merged)
+            {
+                if (iv.Start > cursor)
+                    free.Add((cursor, iv.Start));
+                if (iv.End > cursor)
+                    cursor = iv.End;
+            }
+            if (cursor < windowEnd)
+                free.Add((cursor, windowEnd));
+
+            return free;
+        }
+    }
+
+    public enum ScheduleResult
+    {
+        Ok,
+        GroupNotFound,
+        SupervisorMissing,
+        DateInPast,
+        InvalidTimeRange,
+        VenueRequired,
+        SlotNotFreeForSupervisor,
+        SupervisorHasOverlappingViva,
+        VenueDoubleBooked,
+        GroupDoubleBooked,
+        NoPanelSelected,
+        PanelInvalid,
+        PanelMemberBusy,
+        ProjectCreateFailed,
+        UnknownError
+    }
+
+    public sealed record ScheduleSlotOutcome(ScheduleResult Result, VivaSlot? Slot, string Message);
+
+    public class SupervisorSlotAvailability
+    {
+        public TimeSpan StartTime { get; set; }
+        public TimeSpan EndTime { get; set; }
+        public List<User> AvailablePanelMembers { get; set; } = new();
     }
 
     /// <summary>

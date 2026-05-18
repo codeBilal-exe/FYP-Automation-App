@@ -172,13 +172,21 @@ namespace FYP_AutomationSystem.Data
                 .Property(vs => vs.Venue)
                 .IsRequired()
                 .HasMaxLength(255);
+            // NOTE: actual Postgres column for the VivaSlot side of this join is
+            // "VivaSlotId" (singular) — verified at runtime against the deployed DB.
+            // The migration snapshot says "VivaSlotsId" (plural) but it's stale.
+            // Do NOT "fix" this back to plural unless you've also migrated the DB.
             modelBuilder.Entity<VivaSlot>()
                 .HasMany(vs => vs.PanelMembers)
                 .WithMany()
                 .UsingEntity<Dictionary<string, object>>(
                     "VivaPanelMembers",
                     l => l.HasOne<User>().WithMany().HasForeignKey("PanelMembersId"),
-                    r => r.HasOne<VivaSlot>().WithMany().HasForeignKey("VivaSlotsId"));
+                    r => r.HasOne<VivaSlot>().WithMany().HasForeignKey("VivaSlotId"),
+                    j =>
+                    {
+                        j.HasKey("PanelMembersId", "VivaSlotId");
+                    });
             modelBuilder.Entity<VivaSlot>()
                 .HasOne(vs => vs.Group)
                 .WithMany()

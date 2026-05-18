@@ -130,21 +130,7 @@
       <div class="viva-row mb-3">
         <div class="viva-col">
           <label class="form-label">Date</label>
-          <input type="date" class="form-control" @bind="_newDate" />
-        </div>
-        <div class="viva-col">
-          <label class="form-label">Start Time</label>
-          <select class="form-select" @bind="_newStart" @bind:after="OnTimeChanged">
-            @for (int h = 8; h <= 16; h++)
-            {
-              <option value="@h">@($"{h:00}:00")</option>
-              <option value="@(h).5">@($"{h:00}:30")</option>
-            }
-          </select>
-        </div>
-        <div class="viva-col">
-          <label class="form-label">End Time (30 min)</label>
-          <input type="text" class="form-control" value="@FormatDecimalTime(_newEnd)" disabled />
+          <input type="date" class="form-control" @bind="_newDate" @bind:after="OnDateOrGroupChanged" />
         </div>
       </div>
 
@@ -160,11 +146,11 @@
         </div>
         <div class="viva-col">
           <label class="form-label">Group</label>
-          <select class="form-select" @bind="_newGroupId">
+          <select class="form-select" @bind="_newGroupId" @bind:after="OnDateOrGroupChanged">
             <option value="0">— Select Group —</option>
             @foreach (var g in _groups)
             {
-              <option value="@g.Id">@g.GroupName (@g.Department)</option>
+              <option value="@g.Id">@g.GroupName (@g.Department) · Sup: @(g.Supervisor?.FullName ?? "Unassigned")</option>
             }
           </select>
         </div>
@@ -174,32 +160,65 @@
         </div>
       </div>
 
-      @* Panel assignment section *@
       <div class="viva-panel-section mb-3">
         <div class="d-flex align-items-center justify-content-between mb-2">
-          <label class="form-label mb-0 fw-bold"><i class="bi bi-people-fill me-1"></i>Assign Panel Members (up to 6)</label>
-          <button class="btn btn-sm btn-primary" @onclick="FetchAvailableFaculty" disabled="@_fetchingFaculty">
+          <label class="form-label mb-0 fw-bold"><i class="bi bi-calendar3 me-1"></i>Find Supervisor-Based Free Slots</label>
+          <button class="btn btn-sm btn-primary" @onclick="FetchSupervisorSlots" disabled="@_fetchingFaculty">
             @if (_fetchingFaculty)
             {
               <span class="spinner-border spinner-border-sm me-1"></span>
             }
-            <i class="bi bi-search me-1"></i>Find Available Faculty
+            <i class="bi bi-search me-1"></i>Find Slots
           </button>
+        </div>
+
+        <div class="text-muted mb-2" style="font-size:.82rem">
+          Select a date and group. The system first finds free slots for the group's supervisor, then computes available panel/supervisor members for each slot.
         </div>
 
         @if (_fetchingFaculty)
         {
-          <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-hourglass-split me-1"></i>Checking availability...</div>
+          <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-hourglass-split me-1"></i>Finding free slots for supervisor and panel...</div>
         }
-        else if (_modalAvailFaculty != null)
+        else if (_slotOptions != null)
         {
-          @if (_modalAvailFaculty.Count == 0)
+          @if (_slotOptions.Count == 0)
           {
-            <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-exclamation-circle me-1"></i>No faculty available for this time slot. All faculty have class or existing viva commitments.</div>
+            <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-exclamation-circle me-1"></i>No free slots found for this supervisor on the selected day.</div>
           }
           else
           {
-            <p class="text-muted mb-2" style="font-size:.82rem"><strong>@_modalAvailFaculty.Count</strong> faculty available for @_newDate.ToString("ddd, MMM dd") · @FormatDecimalTime(_newStart) – @FormatDecimalTime(_newEnd)</p>
+            <div class="viva-slot-pick-grid">
+              @foreach (var slot in _slotOptions)
+              {
+                var isSelected = _selectedSlot != null &&
+                                 _selectedSlot.StartTime == slot.StartTime &&
+                                 _selectedSlot.EndTime == slot.EndTime;
+                <div class="viva-slot-pick @(isSelected ? "selected" : "")" @onclick="() => SelectSlot(slot)">
+                  <div class="fw-bold">@FormatTime(slot.StartTime) – @FormatTime(slot.EndTime)</div>
+                  <div class="text-muted" style="font-size:.78rem">@slot.AvailablePanelMembers.Count available panel/supervisor members</div>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      @* Panel assignment section *@
+      <div class="viva-panel-section mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <label class="form-label mb-0 fw-bold"><i class="bi bi-people-fill me-1"></i>Assign Panel Members (up to 6)</label>
+        </div>
+
+        @if (_modalAvailFaculty != null)
+        {
+          @if (_modalAvailFaculty.Count == 0)
+          {
+            <div class="text-muted py-2" style="font-size:.85rem"><i class="bi bi-exclamation-circle me-1"></i>No panel/supervisor members available for the selected slot.</div>
+          }
+          else
+          {
+            <p class="text-muted mb-2" style="font-size:.82rem"><strong>@_modalAvailFaculty.Count</strong> panel/supervisor members available for @_newDate.ToString("ddd, MMM dd") · @FormatTime(_selectedSlot?.StartTime ?? TimeSpan.Zero) – @FormatTime(_selectedSlot?.EndTime ?? TimeSpan.Zero)</p>
             <div class="viva-faculty-pick-grid">
               @foreach (var f in _modalAvailFaculty)
               {
@@ -219,7 +238,7 @@
         }
         else
         {
-          <div class="text-muted py-2" style="font-size:.85rem">Select date & time, then click "Find Available Faculty" to see who's free for this slot.</div>
+          <div class="text-muted py-2" style="font-size:.85rem">Find and select a supervisor free slot first. Then choose panel members available on that exact slot.</div>
         }
       </div>
 
@@ -246,11 +265,11 @@
   // New slot modal
   private bool _showModal;
   private DateTime _newDate = DateTime.Today.AddDays(7);
-  private double _newStart = 9;
-  private double _newEnd = 9.5;
   private SlotType _newSlotType = SlotType.Viva;
   private int _newGroupId;
   private string _newVenue = "";
+  private List<SupervisorSlotAvailability>? _slotOptions;
+  private SupervisorSlotAvailability? _selectedSlot;
   private List<User>? _modalAvailFaculty;
   private HashSet<int> _selectedPanelIds = new();
   private bool _creating;
@@ -266,7 +285,11 @@
   private async Task Load()
   {
     _slots = await VivaService.GetAllScheduledSlots();
-    _groups = await Db.Groups.Include(g => g.Project).OrderBy(g => g.GroupName).ToListAsync();
+    _groups = await Db.Groups
+      .Include(g => g.Project)
+      .Include(g => g.Supervisor)
+      .OrderBy(g => g.GroupName)
+      .ToListAsync();
     _timetableCount = await VivaService.GetTimetableCount();
   }
 
@@ -275,11 +298,11 @@
   {
     _showModal = true;
     _newDate = DateTime.Today.AddDays(7);
-    _newStart = 9;
-    _newEnd = 9.5;
     _newSlotType = SlotType.Viva;
     _newGroupId = 0;
     _newVenue = "";
+    _slotOptions = null;
+    _selectedSlot = null;
     _modalAvailFaculty = null;
     _selectedPanelIds = new();
     _error = "";
@@ -287,36 +310,61 @@
     _fetchingFaculty = false;
   }
 
-  private void OnTimeChanged()
+  private Task OnDateOrGroupChanged()
   {
-    _newEnd = _newStart + 0.5;
+    _slotOptions = null;
+    _selectedSlot = null;
     _modalAvailFaculty = null;
     _selectedPanelIds = new();
+    _error = "";
+    return Task.CompletedTask;
   }
 
-  private async Task FetchAvailableFaculty()
+  private async Task FetchSupervisorSlots()
   {
     _fetchingFaculty = true;
     _error = "";
+    _slotOptions = null;
+    _selectedSlot = null;
+    _modalAvailFaculty = null;
+    _selectedPanelIds = new();
     StateHasChanged();
 
     try
     {
-      var start = DecimalToTimeSpan(_newStart);
-      var end = DecimalToTimeSpan(_newEnd);
-      var day = _newDate.DayOfWeek;
-      _modalAvailFaculty = await VivaService.GetAvailableFaculty(day, start, end, _newDate);
-      _selectedPanelIds = new();
+      if (_newGroupId == 0)
+      {
+        _error = "Please select a group first.";
+        _slotOptions = new List<SupervisorSlotAvailability>();
+        return;
+      }
+
+      if (_newDate.Date < DateTime.Today)
+      {
+        _error = "Date cannot be in the past.";
+        _slotOptions = new List<SupervisorSlotAvailability>();
+        return;
+      }
+
+      _slotOptions = await VivaService.GetSupervisorBasedAvailabilityForGroupDay(_newGroupId, _newDate, 30);
     }
     catch (Exception ex)
     {
-      _error = $"Error fetching faculty: {ex.Message}";
-      _modalAvailFaculty = new List<User>();
+      _error = $"Error finding slots: {ex.Message}";
+      _slotOptions = new List<SupervisorSlotAvailability>();
     }
     finally
     {
       _fetchingFaculty = false;
     }
+  }
+
+  private void SelectSlot(SupervisorSlotAvailability slot)
+  {
+    _selectedSlot = slot;
+    _modalAvailFaculty = slot.AvailablePanelMembers.ToList();
+    _selectedPanelIds = new();
+    _error = "";
   }
 
   private void TogglePanel(int id)
@@ -333,19 +381,30 @@
     if (_newGroupId == 0) { _error = "Please select a group."; return; }
     if (string.IsNullOrWhiteSpace(_newVenue)) { _error = "Please enter a venue."; return; }
     if (_newDate.Date < DateTime.Today) { _error = "Date cannot be in the past."; return; }
+    if (_selectedSlot == null) { _error = "Please select one supervisor free slot."; return; }
     if (_selectedPanelIds.Count == 0) { _error = "Please assign at least one panel member."; return; }
 
     _creating = true;
-    var start = DecimalToTimeSpan(_newStart);
-    var end = DecimalToTimeSpan(_newEnd);
 
-    var result = await VivaService.CreateScheduledSlot(
-        _newDate, start, end, _newVenue, _newGroupId, null, _newSlotType,
+    var outcome = await VivaService.CreateScheduledSlot(
+        _newDate, _selectedSlot.StartTime, _selectedSlot.EndTime, _newVenue, _newGroupId, null, _newSlotType,
         _selectedPanelIds.ToList());
 
-    if (result == null)
+    if (outcome.Result != ScheduleResult.Ok || outcome.Slot == null)
     {
-      _error = "Failed to create slot. Please check selected group, time, and panel assignment.";
+      _error = outcome.Message;
+
+      // If the supervisor's free state changed under our feet, re-fetch slots
+      // so the coordinator sees the corrected availability immediately.
+      if (outcome.Result == ScheduleResult.SlotNotFreeForSupervisor ||
+          outcome.Result == ScheduleResult.SupervisorHasOverlappingViva ||
+          outcome.Result == ScheduleResult.VenueDoubleBooked ||
+          outcome.Result == ScheduleResult.GroupDoubleBooked ||
+          outcome.Result == ScheduleResult.PanelMemberBusy)
+      {
+        await FetchSupervisorSlots();
+      }
+
       _creating = false;
       return;
     }
@@ -476,21 +535,7 @@
   }
 
   // ── Helpers ──
-  private static TimeSpan DecimalToTimeSpan(double d)
-  {
-    var hours = (int)d;
-    var minutes = (d - hours) >= 0.5 ? 30 : 0;
-    return new TimeSpan(hours, minutes, 0);
-  }
-
   private static string FormatTime(TimeSpan t) => $"{t.Hours:00}:{t.Minutes:00}";
-
-  private static string FormatDecimalTime(double d)
-  {
-    var h = (int)d;
-    var m = (d - h) >= 0.5 ? 30 : 0;
-    return $"{h:00}:{m:00}";
-  }
 
   private static string SlotTypeClass(SlotType t) => t switch
   {
@@ -528,6 +573,28 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
     gap: .5rem;
+  }
+  .viva-slot-pick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: .5rem;
+  }
+  .viva-slot-pick {
+    padding: .6rem .7rem;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
+    transition: all .18s ease;
+  }
+  .viva-slot-pick:hover {
+    border-color: var(--primary);
+    background: var(--primary-glow);
+  }
+  .viva-slot-pick.selected {
+    border-color: var(--success);
+    background: rgba(34,197,94,.08);
+    box-shadow: 0 0 0 3px rgba(34,197,94,.15);
   }
   .viva-faculty-pick {
     display: flex;

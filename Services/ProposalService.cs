@@ -304,7 +304,7 @@ namespace FYP_AutomationSystem.Services
                         hod.Id,
                         "proposal_waiting_hod",
                         proposal.Id.ToString(),
-                        "/hod/proposals");
+                        "/hod/review-proposals");
                 }
 
                 await _notificationService.NotifyProposalStatusForGroup(
@@ -377,6 +377,15 @@ namespace FYP_AutomationSystem.Services
                     "Your proposal is fully approved and the project is now active.",
                     NotificationType.Success,
                     "proposal_fully_approved",
+                    proposal.Id.ToString(),
+                    "/student/dashboard");
+
+                await _notificationService.NotifyProposalStatusForGroup(
+                    group.Id,
+                    "Project Assigned",
+                    $"Your group has been assigned the project '{proposal.Title}'.",
+                    NotificationType.Success,
+                    "project_assigned",
                     proposal.Id.ToString(),
                     "/student/dashboard");
 

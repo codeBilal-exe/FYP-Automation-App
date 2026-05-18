@@ -592,12 +592,12 @@ namespace FYP_AutomationSystem.Migrations
                     b.Property<int>("PanelMembersId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("VivaSlotsId")
+                    b.Property<int>("VivaSlotId")
                         .HasColumnType("integer");
 
-                    b.HasKey("PanelMembersId", "VivaSlotsId");
+                    b.HasKey("PanelMembersId", "VivaSlotId");
 
-                    b.HasIndex("VivaSlotsId");
+                    b.HasIndex("VivaSlotId");
 
                     b.ToTable("VivaPanelMembers");
                 });
@@ -708,7 +708,7 @@ namespace FYP_AutomationSystem.Migrations
 
                     b.HasOne("FYP_AutomationSystem.Models.VivaSlot", null)
                         .WithMany()
-                        .HasForeignKey("VivaSlotsId")
+                        .HasForeignKey("VivaSlotId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
