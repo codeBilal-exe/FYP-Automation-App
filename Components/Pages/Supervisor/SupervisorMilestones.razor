@@ -76,7 +76,7 @@ else
             <div class="small text-uppercase text-muted mb-2">Assign New Milestone</div>
             <div class="row g-2">
               <div class="col-md-6"><label class="form-label">Title</label><input class="form-control" @bind="_form.Title" /></div>
-              <div class="col-md-6"><label class="form-label">Deadline</label><input class="form-control" type="datetime-local" @bind-value="_form.Deadline" @bind-value:format="yyyy-MM-ddTHH:mm" /></div>
+              <div class="col-md-6"><label class="form-label">Deadline</label><input class="form-control" type="datetime-local" @bind-value="_form.Deadline" @bind-value:format="yyyy-MM-ddTHH:mm" min="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" /></div>
               <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" rows="3" @bind="_form.Description"></textarea></div>
               <div class="col-12 d-flex justify-content-end"><button type="button" class="btn btn-success" @onclick="AssignMilestone">Assign to Group</button></div>
             </div>
@@ -127,7 +127,7 @@ else
                   else
                   {
                     <div class="d-flex align-items-center gap-2">
-                      <input class="form-control form-control-sm" type="datetime-local" @bind-value="_editDeadline" @bind-value:format="yyyy-MM-ddTHH:mm" style="max-width:240px" />
+                      <input class="form-control form-control-sm" type="datetime-local" @bind-value="_editDeadline" @bind-value:format="yyyy-MM-ddTHH:mm" min="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" style="max-width:240px" />
                       <button type="button" class="btn btn-primary" @onclick="() => SaveDeadline(m.Id)">Save</button>
                       <button type="button" class="btn btn-light" @onclick="CancelEditDeadline">Cancel</button>
                     </div>
@@ -156,13 +156,13 @@ else
 
   private MilestoneForm _form = new();
   private int? _editMilestoneId;
-  private DateTime _editDeadline = DateTime.UtcNow.AddDays(7);
+  private DateTime _editDeadline = DateTime.Now.AddDays(7);
 
   private sealed class MilestoneForm
   {
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public DateTime Deadline { get; set; } = DateTime.UtcNow.AddDays(7);
+    public DateTime Deadline { get; set; } = DateTime.Now.AddDays(7);
   }
 
   private sealed class GroupStats
