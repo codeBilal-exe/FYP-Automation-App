@@ -93,20 +93,11 @@ else
     var proposalLabels = _props.Keys.ToArray();
     var proposalValues = _props.Values.ToArray();
 
-    await JS.InvokeVoidAsync("fypSite.drawChart", "chartStatus", new {
-      type = "doughnut",
-      data = new { labels = statusLabels, datasets = new[] { new { data = statusValues, backgroundColor = new[]{"#94a3b8","#0ea5e9","#22c55e","#64748b"} } } },
-      options = new { animation = new { easing = "easeInOutQuart" }, plugins = new { legend = new { position = "bottom" } } }
-    });
-    await JS.InvokeVoidAsync("fypSite.drawChart", "chartMs", new {
-      type = "bar",
-      data = new { labels = monthLabels, datasets = new[] { new { label = "Completed", data = monthValues, backgroundColor = "#6366f1" } } },
-      options = new { animation = new { easing = "easeInOutQuart" }, plugins = new { legend = new { display = false } } }
-    });
-    await JS.InvokeVoidAsync("fypSite.drawChart", "chartProps", new {
-      type = "line",
-      data = new { labels = proposalLabels, datasets = new[] { new { label = "Submissions", data = proposalValues, borderColor = "#22c55e", backgroundColor = "rgba(34,197,94,.15)", fill = true, tension = 0.35 } } },
-      options = new { animation = new { easing = "easeInOutQuart" } }
+    await JS.InvokeVoidAsync("fypSite.renderDashboardCharts", new
+    {
+      status = new { labels = statusLabels, values = statusValues },
+      month  = new { labels = monthLabels,  values = monthValues },
+      props  = new { labels = proposalLabels, values = proposalValues }
     });
 
     _chartsPending = false;

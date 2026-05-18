@@ -1,9 +1,13 @@
 @page "/Error"
-<div class="auth-wrap">
-  <div class="auth-card text-center">
-    <div class="auth-logo mx-auto"><i class="bi bi-bug"></i></div>
-    <h2>Something went wrong</h2>
-    <p class="text-muted">An unexpected error occurred.</p>
-    <a href="/" class="btn btn-primary mt-2">Reload</a>
+<section class="auth-page">
+  <div class="auth-corner-mark">Status · 500</div>
+  <div class="auth-card pro-auth-card text-center">
+    <div class="auth-eyebrow" style="justify-content:center">Unexpected error</div>
+    <div class="auth-logo mx-auto" aria-hidden="true"><i class="bi bi-bug"></i></div>
+    <h2>Something <em>went sideways.</em></h2>
+    <p class="text-muted">An unexpected error occurred. Try reloading — if the issue persists, contact the coordinator.</p>
+    <a href="/" class="btn btn-primary auth-submit" style="display:inline-flex;margin-top:.4rem">
+      <span>Reload</span><i class="bi bi-arrow-clockwise"></i>
+    </a>
   </div>
-</div>
+</section>

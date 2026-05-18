@@ -11,7 +11,7 @@
             <aside class="app-sidebar @(_collapsed ? "collapsed" : "")">
                 <div class="brand">
                     <i class="bi bi-mortarboard-fill"></i>
-                    <span class="brand-text">FYP System</span>
+                    <span class="brand-text">FYP <em>System</em></span>
                 </div>
                 <NavMenu Role="@_role" />
                 <div class="sidebar-footer">
@@ -26,6 +26,11 @@
                     <button class="btn btn-link d-lg-none p-0 me-2" @onclick="ToggleSidebar"><i class="bi bi-list fs-4"></i></button>
                     <div class="topbar-title">@_pageTitle</div>
                     <div class="topbar-actions">
+                        <button type="button" class="theme-toggle" data-action="toggle-theme"
+                                title="Toggle theme (⌘/Ctrl+J)" aria-label="Toggle light or dark theme">
+                            <i class="ti ti-sun bi bi-sun"></i>
+                            <i class="ti ti-moon bi bi-moon-stars"></i>
+                        </button>
                         <a class="btn btn-link position-relative me-2" href="/notifications" title="Notifications">
                             <i class="bi bi-bell fs-5"></i>
                             @if (_unread > 0)
