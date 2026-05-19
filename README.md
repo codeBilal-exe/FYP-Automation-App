@@ -1,212 +1,255 @@
-# FYP Automation App
+# FYP Automation System
 
-FYP Automation App is a role-based Final Year Project management platform built with **ASP.NET Core (.NET 10)** and **Blazor Interactive Server**. It manages the complete FYP lifecycle: proposal workflow, group/project tracking, milestones, viva scheduling, evaluations, reporting, notifications, and audit logs.
+A role-based Final Year Project (FYP) management platform built with **ASP.NET Core (.NET 10)**, **Blazor Interactive Server**, **EF Core**, and **Supabase PostgreSQL**.
 
-## What This Project Does
+It streamlines the full academic workflow from proposal submission to final viva result publication.
 
-- Centralizes FYP operations for **Student, Supervisor, HOD, Coordinator, Admin, and Panel** roles.
-- Enforces role-specific workflows with cookie auth + authorization.
-- Uses **Supabase PostgreSQL** (via EF Core + Npgsql) as the primary data store.
-- Supports operational workflows like:
-  - team-lead proposal submission,
-  - multi-stage approvals,
-  - automatic project/thread activation,
-  - timetable-aware viva scheduling,
-  - milestone and evaluation tracking,
-  - report generation and archival.
+---
 
-## Architecture Snapshot
+## Table of Contents
 
-- **Frontend/UI**: Blazor components under `Components/`
-- **App Host**: ASP.NET Core Web app (`Program.cs`)
-- **Business Layer**: services under `Services/`
-- **Data Layer**: EF Core context + entities under `Data/` and `Models/`
-- **DB**: Supabase PostgreSQL
-- **Auth**: cookie-based authentication + role authorization
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Role-Based Modules](#role-based-modules)
+- [Workflow Diagrams](#workflow-diagrams)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [Deployment Notes](#deployment-notes)
+- [Future Enhancements](#future-enhancements)
+- [Security Notes](#security-notes)
 
-## Role Modules
+---
 
-Based on current routing/navigation:
+## Overview
 
-- **Student**
-  - Dashboard, proposal submission, milestones, documents, group, result pages
-- **Supervisor**
-  - Proposal review, milestone assignment, progress tracking, evaluations, group oversight, rejection history
-- **HOD**
-  - Dashboard, proposal review stage, rejection history, reports
-- **Coordinator**
-  - Dashboard, announcements, group management, final proposal approval, viva scheduling, reports
-- **Admin**
-  - Dashboard, users, audit logs, announcements
-- **Panel**
-  - Dashboard, schedule, evaluations
+The FYP Automation System manages the complete FYP lifecycle for all stakeholders:
 
-## Core Workflows
+- Students
+- Supervisors
+- HOD
+- Coordinator
+- Panel Members
+- Admins
 
-### 1) Proposal Pipeline
+The system supports proposal approvals, milestone planning/submission, viva scheduling with availability rules, rubric-based evaluations, notifications, reports, and audit logging.
 
-- Proposal submission/edit is **team-lead only** within a group.
-- Approval path:
-  1. Supervisor
-  2. HOD
-  3. Coordinator (final)
-- On final approval:
-  - project is created/activated,
-  - project thread is initialized,
-  - group notifications are sent.
+---
 
-### 2) Group + Project Threading
+## Key Features
 
-- Groups map to supervisors and members.
-- Approved proposals can auto-populate project metadata.
-- Project thread/tasks/submissions enable supervisor-student execution tracking.
+- Team-lead-only proposal submission/editing for each group
+- Multi-stage proposal approvals: **Supervisor -> HOD -> Coordinator**
+- Automatic project activation after final coordinator approval
+- Group notifications on status updates and assignment actions
+- Milestone assignment, submission, and supervisor review
+- Viva scheduling with faculty timetable + overlap checks
+- Venue/time collision prevention
+- Supervisor and panel-based evaluation workflows
+- Student result visibility
+- Announcement and notification center
+- Report generation and archival
+- Audit logs for traceability
 
-### 3) Milestones
+---
 
-- Supervisor and scheduling flows create/manage milestones.
-- Students can submit milestone evidence.
-- Deadlines/status updates are tracked with notifications.
+## Role-Based Modules
 
-### 4) Viva Scheduling (Coordinator/Admin route)
+| Role | Main Capabilities |
+|---|---|
+| Student | Submit proposal, upload milestone work, view group/docs/results |
+| Supervisor | Review proposals, assign milestones, evaluate milestones/viva, track progress |
+| HOD | Proposal-level review and decisioning, reports |
+| Coordinator | Final proposal approval, group management, viva scheduling, reports |
+| Panel | View schedule, submit viva evaluations |
+| Admin | Manage users, audit logs, announcements |
 
-Current scheduling logic includes:
+---
 
-- date/time/venue scheduling with slot type support,
-- supervisor-first availability generation,
-- timetable-aware conflict checks,
-- overlap prevention for:
-  - venue,
-  - group,
-  - supervisor,
-  - selected panel members.
+## Workflow Diagrams
 
-### 5) Evaluations & Results
+### 1) High-Level Workflow
 
-- Supervisor and panel evaluation flows
-- Rubric scoring support
-- Result aggregation per student/project context
+```mermaid
+flowchart TB
+    S((Start)) --> P[Student submits proposal]
+    P --> SP[Supervisor approves]
+    SP --> H[HOD approves]
+    H --> C[Coordinator approves<br/>Project created]
+    C --> M1[Supervisor assigns milestones]
+    M1 --> M2[Student submits milestones]
+    M2 --> M3[Supervisor evaluates milestones]
+    M3 --> V1[Coordinator schedules viva]
+    V1 --> V2[Viva is conducted]
+    V2 --> V3[Supervisor + Panel evaluate viva]
+    V3 --> R[Student views final result]
+    R --> E((End))
+```
 
-### 6) Notifications & Announcements
+### 2) Detailed Workflow (Swimlane Style)
 
-- Per-user notifications with unread/read state and deduping
-- Group-level proposal status notifications
-- Admin/Coordinator announcement broadcasting
+```mermaid
+flowchart LR
 
-### 7) Reporting & Audit
+    subgraph STUDENT[Student]
+      S1[Login]
+      S2[Submit proposal<br/>Title, Abstract, Domain, GitHub]
+      S3[Upload milestone work<br/>file + notes]
+      S4[View final result<br/>marks + percentage]
+    end
 
-- Audit logs for key actions
-- Semester/department report generation and archival
-- Aggregated statistics endpoints/service methods for dashboards
+    subgraph SUPERVISOR[Supervisor]
+      SP1{Approve proposal?}
+      SP2[Reject -> student revises]
+      SP3[Assign milestones<br/>Title, DueDate]
+      SP4[Evaluate milestone<br/>marks recorded]
+      SP5[Submit viva evaluation]
+    end
+
+    subgraph HOD[HOD]
+      H1{Approve proposal?}
+      H2[Reject -> student revises]
+    end
+
+    subgraph COORDINATOR[Coordinator]
+      C1{Approve proposal?}
+      C2[Create project<br/>Notify group]
+      C3[Reject -> student revises]
+      C4[Schedule viva<br/>supervisor + panel + venue]
+    end
+
+    subgraph PANEL[Panel]
+      P1[Conduct viva]
+      P2[Submit viva evaluation]
+    end
+
+    S1 --> S2
+    S2 --> SP1
+    SP1 -- Yes --> H1
+    SP1 -- No --> SP2
+    H1 -- Yes --> C1
+    H1 -- No --> H2
+    C1 -- Yes --> C2
+    C1 -- No --> C3
+
+    C2 --> SP3
+    SP3 --> S3
+    S3 --> SP4
+    SP4 --> C4
+    C4 --> P1
+
+    P1 --> SP5
+    P1 --> P2
+
+    SP5 --> S4
+    P2 --> S4
+```
+
+---
 
 ## Tech Stack
 
 - **.NET 10**
-- **ASP.NET Core Web + Blazor Interactive Server**
+- **ASP.NET Core + Blazor Interactive Server**
 - **Entity Framework Core 10**
-- **Npgsql PostgreSQL provider**
+- **Npgsql (PostgreSQL)**
 - **Supabase PostgreSQL**
-- **ClosedXML** (Excel import)
-- **QuestPDF** (report outputs)
+- **ClosedXML** (Excel imports)
+- **QuestPDF** (report generation)
+
+---
 
 ## Project Structure
 
-- `Program.cs` - DI, auth, middleware, startup tasks, auth endpoints
-- `Components/` - pages, layouts, shared components, routing
-- `Services/` - business logic (proposal, viva, evaluation, reporting, etc.)
-- `Data/AppDbContext.cs` - EF model + relational mapping
-- `Models/` - entities, DTOs, enums
-- `Migrations/` - EF migrations history
-- `wwwroot/` - static assets/uploads
-- `Tools/DbResetImport/` - utility tool (excluded from main app compile)
-- `fyp_mock_users.csv` - login demo credential source
+```text
+Fyp-Automation/
+├── Components/        # Blazor pages, layout, routing, shared UI
+├── Services/          # Business logic (proposal, viva, evaluation, reports, etc.)
+├── Data/              # EF Core DbContext and mappings
+├── Models/            # Entities, enums, DTOs
+├── Migrations/        # EF migrations
+├── wwwroot/           # Static files and uploads
+├── Tools/             # Utility tools (e.g., DB reset/import)
+├── Program.cs         # App startup, DI, middleware, auth endpoints
+└── appsettings*.json  # Configuration
+```
 
-## Local Setup
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- .NET SDK **10.x**
-- Supabase project (PostgreSQL)
+- .NET SDK 10.x
+- Supabase PostgreSQL project
 
-### 1) Restore and Build
+### Run Locally
 
 ```bash
 dotnet restore
 dotnet build
+dotnet run
 ```
 
-### 2) Configure Database Connection
+---
 
-Preferred via environment variable:
+## Configuration
+
+Preferred database config is environment variable:
 
 ```bash
 export SUPABASE_CONNECTION='Host=...;Port=5432;Database=postgres;Username=postgres.<project-ref>;Password=<password>;SSL Mode=Require;Trust Server Certificate=true;Pooling=true'
 ```
 
-Fallback: `appsettings.json` -> `ConnectionStrings:DefaultConnection`.
-
-### 3) Optional Startup Task
-
-To sync existing app users to Supabase auth at startup:
+Optional startup task:
 
 ```bash
 export StartupTasks__SyncSupabaseAuth=true
 ```
 
-### 4) Run
+Notes:
 
-```bash
-dotnet run
-```
+- App reads `SUPABASE_CONNECTION` first, then `ConnectionStrings:DefaultConnection`
+- Cookie auth is used with role-based access checks
 
-App default in development: `http://localhost:5280` (see `launchSettings.json` / runtime logs).
-
-## Runtime Notes
-
-- Startup uses `db.Database.EnsureCreatedAsync()`.
-- App has a safe SQL startup patch for `Groups.RepoLink` (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`).
-- Authentication uses app cookie `FYP_AutomationSystem.Auth` with sliding expiration.
-- Auth endpoints are mapped in `Program.cs`:
-  - `/auth/login`
-  - `/auth/logout`
-  - `/auth/forgot-password`
-  - `/auth/reset-password`
-  - `/auth/reset-password-supabase`
-
-## Demo Credentials
-
-- Login page demo pills are sourced from `fyp_mock_users.csv`.
-- Use `Tools/DbResetImport` only when you intentionally want to reset/import mock users.
+---
 
 ## Deployment Notes
 
-This project is **server-hosted Blazor**, not standalone static WASM output, so deploy it to a .NET-capable host (e.g., Azure App Service).
+This is a **server-hosted Blazor app**, so deploy it on a .NET-capable host (e.g., Azure App Service).
 
-For Azure/App Service, ensure these app settings are configured:
+For Azure App Service, set app settings such as:
 
 - `SUPABASE_CONNECTION`
 - `Supabase__Url`
 - `Supabase__AnonKey`
-- `Supabase__ServiceRoleKey` (if your flows use it)
-- SMTP settings if password reset email is enabled
-
-## Security Checklist
-
-- Do not commit real DB passwords/API keys/service-role keys.
-- Use environment variables or platform secrets in hosted environments.
-- Rotate exposed credentials immediately if they were ever committed.
-
-## Troubleshooting
-
-- **Connection string/host/password issues**: check `SUPABASE_CONNECTION` format and credentials.
-- **PostgreSQL UTC errors**: normalize date/timestamp writes/queries to UTC for `timestamptz` columns.
-- **Scheduling conflicts**: validate faculty timetable rows and existing overlapping viva slots.
-- **Missing/incorrect join-table column names**: verify `VivaPanelMembers` mapping in `Data/AppDbContext.cs` matches actual DB schema.
+- `Supabase__ServiceRoleKey`
+- SMTP settings if password reset emails are enabled
 
 ---
 
-If you are onboarding, start with:
+## Future Enhancements
 
-1. `Program.cs` (startup/auth flow)
-2. `Data/AppDbContext.cs` (schema/mappings)
-3. `Services/ProposalService.cs` and `Services/VivaService.cs` (core workflows)
-4. `Components/Layout/NavMenu.razor` + role pages in `Components/Pages/`
+- Calendar integration (Google/Outlook sync for viva scheduling)
+- ICS export + automated reminder emails/notifications
+- Supervisor workload balancing recommendations
+- Conflict-resolution assistant for scheduler
+- Advanced analytics dashboard (submission trends, pass rates, supervision load)
+- Plagiarism workflow integration with submission gates
+- Multi-semester comparative reporting and archive insights
+- Granular access controls and policy-based permissions
+- Public API layer for LMS/ERP integration
+- Background job processing for heavy tasks (notifications, report rendering)
+
+---
+
+## Security Notes
+
+- Never commit real secrets (DB passwords, API keys, service-role tokens)
+- Use environment variables or managed secret stores in production
+- Rotate secrets immediately if exposed
+
+---
+
+Built for structured academic workflow management with traceability, transparency, and role accountability.
