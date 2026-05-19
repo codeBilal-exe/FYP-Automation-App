@@ -1,0 +1,373 @@
+@page "/student/ideas"
+@attribute [Authorize(Roles = "Student")]
+@inject GroqService GroqService
+
+<div class="page-header">
+    <div>
+        <h1>FYP Idea Generator</h1>
+        <div class="page-subtitle">Answer a few questions and let AI generate personalised project ideas for you.</div>
+    </div>
+</div>
+
+@if (_step == Step.Form)
+{
+    <div class="fcard idea-form-card">
+        <div class="idea-form-intro">
+            <i class="bi bi-stars idea-intro-icon"></i>
+            <p>Tell us about your interests and we'll generate <strong>3–5 tailored FYP ideas</strong> complete with problem statements.</p>
+        </div>
+
+        <EditForm Model="_req" OnValidSubmit="GenerateAsync">
+            <DataAnnotationsValidator />
+
+            <div class="idea-fields">
+                <div class="idea-field-group">
+                    <label class="idea-label">
+                        <i class="bi bi-diagram-3"></i> Domain / Field of Interest
+                        <span class="idea-hint">e.g. Artificial Intelligence, Web Development, Cybersecurity, IoT</span>
+                    </label>
+                    <InputText class="form-control" @bind-Value="_req.Domain" placeholder="e.g. Machine Learning &amp; Healthcare" />
+                    <ValidationMessage For="() => _req.Domain" />
+                </div>
+
+                <div class="idea-field-group">
+                    <label class="idea-label">
+                        <i class="bi bi-cpu"></i> Technologies You Know or Want to Use
+                        <span class="idea-hint">List frameworks, languages, or platforms you're comfortable with</span>
+                    </label>
+                    <InputText class="form-control" @bind-Value="_req.Technologies" placeholder="e.g. Python, TensorFlow, React, Node.js" />
+                </div>
+
+                <div class="idea-field-group">
+                    <label class="idea-label">
+                        <i class="bi bi-bullseye"></i> Problem Area to Address
+                        <span class="idea-hint">What real-world sector or challenge should your project tackle?</span>
+                    </label>
+                    <InputText class="form-control" @bind-Value="_req.ProblemArea" placeholder="e.g. Education accessibility, Hospital management, Smart agriculture" />
+                </div>
+
+                <div class="idea-field-group">
+                    <label class="idea-label">
+                        <i class="bi bi-people"></i> Project Scope / Team Size
+                    </label>
+                    <InputSelect class="form-select" @bind-Value="_req.Scope">
+                        <option value="">— select —</option>
+                        <option value="Solo project (1 person)">Solo project (1 person)</option>
+                        <option value="Small team (2–3 people)">Small team (2–3 people)</option>
+                        <option value="Full team (4+ people)">Full team (4+ people)</option>
+                    </InputSelect>
+                </div>
+
+                <div class="idea-field-group">
+                    <label class="idea-label">
+                        <i class="bi bi-chat-square-text"></i> How many ideas? <span class="idea-hint">3–5</span>
+                    </label>
+                    <div class="idea-count-row">
+                        @foreach (var n in new[] { 3, 4, 5 })
+                        {
+                            <button type="button"
+                                    class="idea-count-btn @(_req.IdeaCount == n ? "active" : "")"
+                                    @onclick="() => _req.IdeaCount = n">@n</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="idea-field-group">
+                    <label class="idea-label">
+                        <i class="bi bi-pencil-square"></i> Additional Preferences <span class="idea-hint">Optional</span>
+                    </label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="_req.AdditionalNotes"
+                                   placeholder="Any constraints, inspirations, or things to avoid…" />
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-danger mt-3">@_error</div>
+            }
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary idea-generate-btn" disabled="@_isGenerating">
+                    @if (_isGenerating)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>Generating…</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-stars me-2"></i>
+                        <span>Generate Ideas</span>
+                    }
+                </button>
+            </div>
+        </EditForm>
+    </div>
+}
+else if (_step == Step.Generating)
+{
+    <div class="idea-generating-state fcard">
+        <div class="idea-gen-animation">
+            <div class="idea-gen-pulse"></div>
+            <i class="bi bi-stars idea-gen-icon"></i>
+        </div>
+        <div class="idea-gen-label">Generating your FYP ideas…</div>
+        <div class="idea-gen-sub">Our AI is crafting personalised project ideas based on your profile. This usually takes 5–15 seconds.</div>
+    </div>
+}
+else if (_step == Step.Results && _ideas.Count > 0)
+{
+    <div class="idea-results-header fcard mb-3">
+        <div class="idea-results-meta">
+            <i class="bi bi-stars"></i>
+            <span>Generated <strong>@_ideas.Count idea@(_ideas.Count == 1 ? "" : "s")</strong> based on your profile</span>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="Reset">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Start Over
+        </button>
+    </div>
+
+    <div class="idea-cards-grid">
+        @for (var i = 0; i < _ideas.Count; i++)
+        {
+            var idea = _ideas[i];
+            var num = i + 1;
+            <div class="idea-card fcard">
+                <div class="idea-card-header">
+                    <span class="idea-card-num">@num</span>
+                    <h3 class="idea-card-title">@idea.Title</h3>
+                </div>
+
+                <div class="idea-card-section">
+                    <div class="idea-card-section-label"><i class="bi bi-info-circle"></i> Overview</div>
+                    <p class="idea-card-text">@idea.Summary</p>
+                </div>
+
+                <div class="idea-card-section">
+                    <div class="idea-card-section-label"><i class="bi bi-exclamation-triangle"></i> Problem Statement</div>
+                    <p class="idea-card-text idea-problem">@idea.ProblemStatement</p>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(idea.Technologies))
+                {
+                    <div class="idea-card-tech-row">
+                        @foreach (var tech in idea.Technologies.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            <span class="idea-tech-chip">@tech</span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="mt-3 text-center">
+        <button class="btn btn-outline-primary" @onclick="Reset">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Generate More Ideas
+        </button>
+    </div>
+}
+
+@code {
+    private enum Step { Form, Generating, Results }
+
+    private Step _step = Step.Form;
+    private bool _isGenerating;
+    private string? _error;
+    private IdeaRequestDto _req = new() { IdeaCount = 4 };
+    private List<FypIdeaDto> _ideas = [];
+
+    private async Task GenerateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_req.Domain))
+        {
+            _error = "Please enter your domain / field of interest.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_req.Scope))
+        {
+            _error = "Please select a project scope.";
+            return;
+        }
+
+        _error = null;
+        _isGenerating = true;
+        _step = Step.Generating;
+        StateHasChanged();
+
+        try
+        {
+            _ideas = await GroqService.GenerateIdeasAsync(_req);
+            _step = Step.Results;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _step = Step.Form;
+        }
+        finally
+        {
+            _isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Reset()
+    {
+        _step = Step.Form;
+        _ideas = [];
+        _error = null;
+        _isGenerating = false;
+        _req = new() { IdeaCount = 4 };
+    }
+}
+
+<style>
+    .idea-form-card { max-width: 740px; }
+
+    .idea-form-intro {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: .9rem 1rem;
+        background: var(--surface-2, rgba(var(--accent-rgb, 90 60 120)/.08));
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+    .idea-intro-icon { font-size: 1.6rem; color: var(--accent); flex-shrink: 0; margin-top: .15rem; }
+
+    .idea-fields { display: flex; flex-direction: column; gap: 1.25rem; }
+
+    .idea-field-group { display: flex; flex-direction: column; gap: .35rem; }
+    .idea-label {
+        font-weight: 600;
+        font-size: .9rem;
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+    .idea-hint { font-weight: 400; color: var(--ink-3); font-size: .8rem; }
+
+    .idea-count-row { display: flex; gap: .5rem; }
+    .idea-count-btn {
+        width: 44px; height: 44px;
+        border-radius: 8px;
+        border: 1.5px solid var(--border);
+        background: var(--surface);
+        color: var(--ink);
+        font-weight: 600;
+        font-size: 1.05rem;
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .idea-count-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .idea-count-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .idea-generate-btn { padding: .65rem 1.8rem; font-size: 1rem; }
+
+    /* ── Generating state ── */
+    .idea-generating-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 3rem 1.5rem;
+        text-align: center;
+    }
+    .idea-gen-animation { position: relative; width: 72px; height: 72px; }
+    .idea-gen-pulse {
+        position: absolute; inset: 0;
+        border-radius: 50%;
+        background: rgba(var(--accent-rgb, 90 60 120)/.18);
+        animation: idea-pulse 1.6s ease-in-out infinite;
+    }
+    @@keyframes idea-pulse {
+        0%,100% { transform: scale(1); opacity: .7; }
+        50%       { transform: scale(1.35); opacity: .25; }
+    }
+    .idea-gen-icon {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: var(--accent);
+        width: 100%; line-height: 72px;
+    }
+    .idea-gen-label { font-size: 1.2rem; font-weight: 600; color: var(--ink); }
+    .idea-gen-sub { color: var(--ink-3); max-width: 380px; font-size: .9rem; }
+
+    /* ── Results ── */
+    .idea-results-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .idea-results-meta { display: flex; align-items: center; gap: .5rem; color: var(--ink-2); }
+    .idea-results-meta i { color: var(--accent); font-size: 1.1rem; }
+
+    .idea-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1.25rem;
+        margin-bottom: 1rem;
+    }
+
+    .idea-card { display: flex; flex-direction: column; gap: 1rem; }
+
+    .idea-card-header { display: flex; align-items: flex-start; gap: .75rem; }
+    .idea-card-num {
+        flex-shrink: 0;
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: .8rem;
+        font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        margin-top: .1rem;
+    }
+    .idea-card-title {
+        font-family: var(--font-display, Georgia, serif);
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--ink);
+        margin: 0;
+    }
+
+    .idea-card-section { display: flex; flex-direction: column; gap: .3rem; }
+    .idea-card-section-label {
+        font-size: .78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ink-3);
+        display: flex; align-items: center; gap: .3rem;
+    }
+    .idea-card-text { margin: 0; color: var(--ink-2); font-size: .9rem; line-height: 1.55; }
+    .idea-problem {
+        border-left: 3px solid var(--accent);
+        padding-left: .75rem;
+        color: var(--ink);
+    }
+
+    .idea-card-tech-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        margin-top: .25rem;
+    }
+    .idea-tech-chip {
+        font-size: .75rem;
+        font-weight: 500;
+        padding: .2rem .6rem;
+        border-radius: 20px;
+        background: var(--surface-2, rgba(var(--accent-rgb, 90 60 120)/.1));
+        color: var(--accent);
+        border: 1px solid rgba(var(--accent-rgb, 90 60 120)/.2);
+    }
+</style>

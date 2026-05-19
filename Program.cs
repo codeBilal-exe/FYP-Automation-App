@@ -79,6 +79,7 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<PasswordResetService>();
 builder.Services.AddScoped<SupabaseAuthSyncService>();
+builder.Services.AddSingleton<GroqService>();
 
 // Custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
