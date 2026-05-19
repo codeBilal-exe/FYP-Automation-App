@@ -1,0 +1,416 @@
+@page "/supervisor/evaluation"
+@namespace FYP_AutomationSystem.Components.Pages.Supervisor.Views
+@attribute [Authorize(Roles = "Supervisor")]
+@inject AuthenticationStateProvider AuthProvider
+@inject EvaluationService EvaluationService
+
+<div class="page-header">
+    <div>
+        <h1>Evaluation</h1>
+        <div class="page-subtitle">Evaluate milestones and vivas for your groups.</div>
+    </div>
+</div>
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading evaluation items..." />
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_pageError))
+    {
+        <div class="alert alert-danger">@_pageError</div>
+    }
+
+    @if (!_items.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            No milestones or vivas found for your groups.
+        </div>
+    }
+    else
+    {
+        @foreach (var groupBlock in _items.GroupBy(i => new { i.GroupId, i.GroupName }).OrderBy(g => g.Key.GroupId))
+        {
+            var groupId = groupBlock.Key.GroupId;
+            var groupItems = groupBlock.ToList();
+            var evaluatedCount = groupItems.Count(i => i.IsEvaluated);
+            var totalCount = groupItems.Count;
+            var expanded = _groupExpanded.GetValueOrDefault(groupId, true);
+            var milestones = groupItems.Where(i => i.Type == "Milestone").ToList();
+            var vivas = groupItems.Where(i => i.Type == "Viva").ToList();
+
+            <div class="fcard mb-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="fw-semibold">Group: @groupBlock.Key.GroupName</div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary">@evaluatedCount / @totalCount evaluated</span>
+                        <button class="btn btn-sm btn-soft" @onclick="() => ToggleGroup(groupId)">
+                            @(expanded ? "Collapse" : "Expand")
+                        </button>
+                    </div>
+                </div>
+
+                @if (expanded)
+                {
+                    <div class="mt-3">
+                        <h6 class="mb-2">Milestones</h6>
+                        @if (!milestones.Any())
+                        {
+                            <div class="text-muted small mb-3">No milestones found.</div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive mb-3">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Title</th>
+                                            <th>Due</th>
+                                            <th>Status</th>
+                                            <th style="width: 140px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in milestones)
+                                        {
+                                            var rowKey = GetRowKey(item);
+                                            var rowOpen = _rowExpanded.GetValueOrDefault(rowKey);
+
+                                            <tr>
+                                                <td>@item.Title</td>
+                                                <td>@FormatDate(item.ScheduledDate)</td>
+                                                <td>@item.Status</td>
+                                                <td>
+                                                    <button class="btn btn-sm @(item.IsEvaluated ? "btn-warning" : "btn-primary")" @onclick="() => OpenRow(item)">
+                                                        @(item.IsEvaluated ? "Update" : "Evaluate")
+                                                    </button>
+                                                </td>
+                                            </tr>
+
+                                            @if (rowOpen)
+                                            {
+                                                <tr class="table-light">
+                                                    <td colspan="4">
+                                                        <div class="row g-2 align-items-end">
+                                                            <div class="col-md-3">
+                                                                <label class="form-label mb-1">Marks</label>
+                                                                <input class="form-control"
+                                                                       type="number"
+                                                                       min="0"
+                                                                       max="100"
+                                                                       step="0.5"
+                                                                       value="@GetDraftMarksText(rowKey)"
+                                                                       @oninput="e => UpdateDraftMarks(rowKey, e.Value?.ToString())" />
+                                                            </div>
+                                                            <div class="col-md-7">
+                                                                <label class="form-label mb-1">Comment (optional)</label>
+                                                                <textarea class="form-control"
+                                                                          maxlength="500"
+                                                                          rows="2"
+                                                                          @oninput="e => UpdateDraftComment(rowKey, e.Value?.ToString())">@GetDraftComment(rowKey)</textarea>
+                                                                <div class="small text-muted">@GetCommentLength(rowKey)/500</div>
+                                                            </div>
+                                                            <div class="col-md-2">
+                                                                <button class="btn btn-success w-100"
+                                                                        disabled="@_savingRows.Contains(rowKey)"
+                                                                        @onclick="() => SaveRowAsync(item)">
+                                                                    @(_savingRows.Contains(rowKey) ? "Saving..." : "Save")
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        @if (_rowMessages.TryGetValue(rowKey, out var rowMessage) && !string.IsNullOrWhiteSpace(rowMessage))
+                                                        {
+                                                            <div class="alert @(_rowMessageIsError.Contains(rowKey) ? "alert-danger" : "alert-success") mt-2 mb-0">@rowMessage</div>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        <h6 class="mb-2">Vivas</h6>
+                        @if (!vivas.Any())
+                        {
+                            <div class="text-muted small">No vivas found.</div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Title</th>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                            <th style="width: 140px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in vivas)
+                                        {
+                                            var rowKey = GetRowKey(item);
+                                            var rowOpen = _rowExpanded.GetValueOrDefault(rowKey);
+
+                                            <tr>
+                                                <td>@item.Title</td>
+                                                <td>@FormatDate(item.ScheduledDate)</td>
+                                                <td>@item.Status</td>
+                                                <td>
+                                                    <button class="btn btn-sm @(item.IsEvaluated ? "btn-warning" : "btn-primary")" @onclick="() => OpenRow(item)">
+                                                        @(item.IsEvaluated ? "Update" : "Evaluate")
+                                                    </button>
+                                                </td>
+                                            </tr>
+
+                                            @if (rowOpen)
+                                            {
+                                                <tr class="table-light">
+                                                    <td colspan="4">
+                                                        <div class="row g-2 align-items-end">
+                                                            <div class="col-md-3">
+                                                                <label class="form-label mb-1">Marks</label>
+                                                                <input class="form-control"
+                                                                       type="number"
+                                                                       min="0"
+                                                                       max="100"
+                                                                       step="0.5"
+                                                                       value="@GetDraftMarksText(rowKey)"
+                                                                       @oninput="e => UpdateDraftMarks(rowKey, e.Value?.ToString())" />
+                                                            </div>
+                                                            <div class="col-md-7">
+                                                                <label class="form-label mb-1">Comment (optional)</label>
+                                                                <textarea class="form-control"
+                                                                          maxlength="500"
+                                                                          rows="2"
+                                                                          @oninput="e => UpdateDraftComment(rowKey, e.Value?.ToString())">@GetDraftComment(rowKey)</textarea>
+                                                                <div class="small text-muted">@GetCommentLength(rowKey)/500</div>
+                                                            </div>
+                                                            <div class="col-md-2">
+                                                                <button class="btn btn-success w-100"
+                                                                        disabled="@_savingRows.Contains(rowKey)"
+                                                                        @onclick="() => SaveRowAsync(item)">
+                                                                    @(_savingRows.Contains(rowKey) ? "Saving..." : "Save")
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        @if (_rowMessages.TryGetValue(rowKey, out var rowMessage) && !string.IsNullOrWhiteSpace(rowMessage))
+                                                        {
+                                                            <div class="alert @(_rowMessageIsError.Contains(rowKey) ? "alert-danger" : "alert-success") mt-2 mb-0">@rowMessage</div>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+}
+
+@code {
+    private bool _isLoading = true;
+    private string? _pageError;
+    private int _supervisorId;
+    private List<EvaluationItemDto> _items = new();
+    private readonly Dictionary<int, bool> _groupExpanded = new();
+    private readonly Dictionary<int, bool> _rowExpanded = new();
+    private readonly Dictionary<int, decimal?> _draftMarks = new();
+    private readonly Dictionary<int, string> _draftComments = new();
+    private readonly Dictionary<int, string> _rowMessages = new();
+    private readonly HashSet<int> _rowMessageIsError = new();
+    private readonly HashSet<int> _savingRows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        _pageError = null;
+
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idValue, out _supervisorId))
+            {
+                _pageError = "Unable to resolve current user.";
+                _items = new List<EvaluationItemDto>();
+                _isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            _items = await EvaluationService.GetSupervisorEvaluationItemsAsync(_supervisorId);
+            _groupExpanded.Clear();
+            _rowExpanded.Clear();
+            _draftMarks.Clear();
+            _draftComments.Clear();
+            _rowMessages.Clear();
+            _rowMessageIsError.Clear();
+            _savingRows.Clear();
+
+            foreach (var groupId in _items.Select(i => i.GroupId).Distinct())
+            {
+                _groupExpanded[groupId] = true;
+            }
+
+            foreach (var item in _items)
+            {
+                var key = GetRowKey(item);
+                _draftMarks[key] = item.ExistingMarks;
+                _draftComments[key] = item.ExistingComment ?? string.Empty;
+                _rowExpanded[key] = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _pageError = $"Failed to load evaluation items: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleGroup(int groupId)
+    {
+        _groupExpanded[groupId] = !_groupExpanded.GetValueOrDefault(groupId, true);
+    }
+
+    private void OpenRow(EvaluationItemDto item)
+    {
+        foreach (var key in _rowExpanded.Keys.ToList())
+        {
+            _rowExpanded[key] = false;
+        }
+
+        var rowKey = GetRowKey(item);
+        _rowExpanded[rowKey] = true;
+        _rowMessages[rowKey] = string.Empty;
+        _rowMessageIsError.Remove(rowKey);
+    }
+
+    private void UpdateDraftMarks(int rowKey, string? value)
+    {
+        if (decimal.TryParse(value, out var parsed))
+        {
+            _draftMarks[rowKey] = parsed;
+            return;
+        }
+
+        _draftMarks[rowKey] = null;
+    }
+
+    private void UpdateDraftComment(int rowKey, string? value)
+    {
+        _draftComments[rowKey] = value ?? string.Empty;
+    }
+
+    private string GetDraftMarksText(int rowKey)
+    {
+        return _draftMarks.TryGetValue(rowKey, out var marks) && marks.HasValue
+            ? marks.Value.ToString("0.##")
+            : string.Empty;
+    }
+
+    private string GetDraftComment(int rowKey)
+    {
+        return _draftComments.TryGetValue(rowKey, out var comment)
+            ? comment
+            : string.Empty;
+    }
+
+    private int GetCommentLength(int rowKey)
+    {
+        return GetDraftComment(rowKey).Length;
+    }
+
+    private async Task SaveRowAsync(EvaluationItemDto item)
+    {
+        var rowKey = GetRowKey(item);
+        _rowMessages[rowKey] = string.Empty;
+        _rowMessageIsError.Remove(rowKey);
+        _savingRows.Add(rowKey);
+        StateHasChanged();
+
+        try
+        {
+            if (!_draftMarks.TryGetValue(rowKey, out var marks) || !marks.HasValue)
+            {
+                _rowMessages[rowKey] = "Please enter marks before saving.";
+                _rowMessageIsError.Add(rowKey);
+                return;
+            }
+
+            if (marks.Value < 0 || marks.Value > 100)
+            {
+                _rowMessages[rowKey] = "Marks must be between 0 and 100.";
+                _rowMessageIsError.Add(rowKey);
+                return;
+            }
+
+            var comment = GetDraftComment(rowKey);
+            if (comment.Length > 500)
+            {
+                _rowMessages[rowKey] = "Comment cannot exceed 500 characters.";
+                _rowMessageIsError.Add(rowKey);
+                return;
+            }
+
+            var result = await EvaluationService.SaveEvaluationAsync(
+                _supervisorId,
+                "Supervisor",
+                item.Id,
+                item.Type,
+                marks.Value,
+                string.IsNullOrWhiteSpace(comment) ? null : comment,
+                item.GroupId);
+
+            if (!result.Success)
+            {
+                _rowMessages[rowKey] = result.ErrorMessage ?? "Unable to save evaluation.";
+                _rowMessageIsError.Add(rowKey);
+                return;
+            }
+
+            item.ExistingMarks = marks.Value;
+            item.ExistingComment = string.IsNullOrWhiteSpace(comment) ? null : comment;
+            _rowMessages[rowKey] = "Saved successfully.";
+            _rowExpanded[rowKey] = false;
+        }
+        catch (Exception ex)
+        {
+            _rowMessages[rowKey] = $"Failed to save: {ex.Message}";
+            _rowMessageIsError.Add(rowKey);
+        }
+        finally
+        {
+            _savingRows.Remove(rowKey);
+            StateHasChanged();
+        }
+    }
+
+    private static int GetRowKey(EvaluationItemDto item)
+    {
+        return item.Type == "Viva" ? 1_000_000 + item.Id : item.Id;
+    }
+
+    private static string FormatDate(DateTime? date)
+    {
+        return date.HasValue ? date.Value.ToString("dd MMM yyyy") : "N/A";
+    }
+}

@@ -1,0 +1,229 @@
+@page "/student/result"
+@attribute [Authorize(Roles = "Student")]
+@inject AuthenticationStateProvider AuthProvider
+@inject EvaluationService EvaluationService
+
+<div class="page-header">
+    <div>
+        <h1>My Result</h1>
+        <div class="page-subtitle">Detailed marks across milestones and vivas.</div>
+    </div>
+</div>
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading result..." />
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+    else if (_result == null || !_result.Tasks.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-hourglass-split"></i>
+            No result data is available yet.
+        </div>
+    }
+    else
+    {
+        var milestoneTasks = _result.Tasks.Where(t => t.Type == "Milestone").OrderBy(t => t.Date).ToList();
+        var vivaTasks = _result.Tasks.Where(t => t.Type == "Viva").OrderBy(t => t.Date).ToList();
+
+        <div class="fcard mb-3">
+            <div class="fw-semibold mb-3">My Result - @_result.GroupName</div>
+
+            <h6>Milestones</h6>
+            <div class="table-responsive mb-4">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th>Date</th>
+                            <th>Evaluator</th>
+                            <th>Marks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!milestoneTasks.Any())
+                        {
+                            <tr>
+                                <td colspan="4" class="text-muted">No milestones found.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var task in milestoneTasks)
+                            {
+                                if (!task.Marks.Any())
+                                {
+                                    <tr>
+                                        <td>@task.Title</td>
+                                        <td>@FormatDate(task.Date)</td>
+                                        <td class="text-muted">-</td>
+                                        <td class="text-muted">Pending</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    foreach (var mark in task.Marks.OrderBy(m => m.EvaluatorRole))
+                                    {
+                                        <tr>
+                                            <td>@task.Title</td>
+                                            <td>@FormatDate(task.Date)</td>
+                                            <td>@mark.EvaluatorRole</td>
+                                            <td>@mark.Marks.ToString("0.#") / 100</td>
+                                        </tr>
+                                    }
+                                }
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <h6>Vivas</h6>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th>Date</th>
+                            <th>Evaluator</th>
+                            <th>Marks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!vivaTasks.Any())
+                        {
+                            <tr>
+                                <td colspan="4" class="text-muted">No vivas found.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var task in vivaTasks)
+                            {
+                                if (!task.Marks.Any())
+                                {
+                                    <tr>
+                                        <td>@task.Title</td>
+                                        <td>@FormatDate(task.Date)</td>
+                                        <td class="text-muted">-</td>
+                                        <td class="text-muted">Pending</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    var supervisorMark = task.Marks.FirstOrDefault(m => m.EvaluatorRole == "Supervisor");
+                                    var panelMarks = task.Marks.Where(m => m.EvaluatorRole == "Panel Member").ToList();
+                                    var panelAverage = panelMarks.Any() ? Math.Round(panelMarks.Average(m => m.Marks), 1) : (decimal?)null;
+                                    var combinedAverage = Math.Round(task.Marks.Average(m => m.Marks), 1);
+
+                                    @if (supervisorMark != null)
+                                    {
+                                        <tr>
+                                            <td>@task.Title</td>
+                                            <td>@FormatDate(task.Date)</td>
+                                            <td>Supervisor</td>
+                                            <td>@supervisorMark.Marks.ToString("0.#") / 100</td>
+                                        </tr>
+                                    }
+
+                                    @if (panelAverage.HasValue)
+                                    {
+                                        <tr>
+                                            <td>@task.Title</td>
+                                            <td>@FormatDate(task.Date)</td>
+                                            <td>Panel (avg)</td>
+                                            <td>@panelAverage.Value.ToString("0.#") / 100</td>
+                                        </tr>
+                                    }
+
+                                    <tr>
+                                        <td>@task.Title</td>
+                                        <td>@FormatDate(task.Date)</td>
+                                        <td><strong>Combined</strong></td>
+                                        <td><strong>@combinedAverage.ToString("0.#") / 100</strong></td>
+                                    </tr>
+                                }
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="fcard">
+            <div class="fw-semibold mb-2">Total: @_result.TotalMarks.ToString("0.#") / @_result.MaxMarks.ToString("0.#") - Percentage: @_result.Percentage.ToString("0.#")%</div>
+            <div class="progress" style="height: 20px;">
+                <div class="progress-bar @GetProgressColor(_result.Percentage)"
+                     role="progressbar"
+                     style="width: @_result.Percentage%;"
+                     aria-valuenow="@_result.Percentage"
+                     aria-valuemin="0"
+                     aria-valuemax="100">
+                    @_result.Percentage.ToString("0.#")%
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private bool _isLoading = true;
+    private string? _error;
+    private StudentResultDto? _result;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        _error = null;
+
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var idValue = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idValue, out var studentId))
+            {
+                _error = "Unable to resolve current user.";
+                _isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            _result = await EvaluationService.GetStudentResultAsync(studentId);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load result: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatDate(DateTime? date)
+    {
+        return date.HasValue ? date.Value.ToString("dd MMM yyyy") : "N/A";
+    }
+
+    private static string GetProgressColor(decimal percentage)
+    {
+        if (percentage >= 70)
+        {
+            return "bg-success";
+        }
+
+        if (percentage >= 50)
+        {
+            return "bg-warning";
+        }
+
+        return "bg-danger";
+    }
+}

@@ -126,6 +126,26 @@ namespace FYP_AutomationSystem.Data
             modelBuilder.Entity<Evaluation>()
                 .HasKey(e => e.Id);
             modelBuilder.Entity<Evaluation>()
+                .Property(e => e.ItemType)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue(string.Empty);
+            modelBuilder.Entity<Evaluation>()
+                .Property(e => e.EvaluatorRole)
+                .IsRequired()
+                .HasMaxLength(32)
+                .HasDefaultValue(string.Empty);
+            modelBuilder.Entity<Evaluation>()
+                .Property(e => e.Marks)
+                .HasColumnType("numeric");
+            modelBuilder.Entity<Evaluation>()
+                .Property(e => e.Comment)
+                .HasMaxLength(500);
+            modelBuilder.Entity<Evaluation>()
+                .HasIndex(e => new { e.ItemId, e.ItemType, e.EvaluatorId })
+                .IsUnique()
+                .HasFilter("\"ItemType\" IN ('Milestone', 'Viva')");
+            modelBuilder.Entity<Evaluation>()
                 .HasOne(e => e.Evaluator)
                 .WithMany()
                 .HasForeignKey(e => e.EvaluatorId)
