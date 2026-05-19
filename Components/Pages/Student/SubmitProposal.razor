@@ -57,7 +57,7 @@
           }
           @if (!string.IsNullOrWhiteSpace(_existingDocumentName) && string.IsNullOrWhiteSpace(_selectedFileName))
           {
-            <div class="small mt-1">Current: <a href="@_existingDocumentPath" target="_blank">@_existingDocumentName</a></div>
+            <div class="small mt-1">Current: <a href="@($"/files/proposal/{_existingProposalId}")" target="_blank">@_existingDocumentName</a></div>
           }
         </div>
 
@@ -163,6 +163,7 @@
   private string? _selectedFileName;
   private string? _existingDocumentPath;
   private string? _existingDocumentName;
+  private int _existingProposalId;
   private bool _showDiscardConfirm;
   private CancellationTokenSource _pollCts = new();
   private bool _saving;
@@ -205,6 +206,7 @@
       _latestStatus = latest.Status;
       _existingDocumentPath = latest.DocumentPath;
       _existingDocumentName = latest.DocumentName;
+      _existingProposalId = latest.Id;
       _model = new ProposalModel
       {
         Title = latest.Title,
@@ -275,6 +277,7 @@
         payload.DocumentPath = upload.SavedPath;
         payload.DocumentName = upload.SavedName;
         payload.DocumentUploadedAt = DateTime.UtcNow;
+        payload.DocumentBytes = upload.Bytes;
         _existingDocumentPath = upload.SavedPath;
         _existingDocumentName = upload.SavedName;
       }

@@ -15,6 +15,8 @@ namespace FYP_AutomationSystem.Models
         public string? SubmissionNotes { get; set; }
         public DateTime? SubmittedAt { get; set; }
         public int? SubmittedByStudentId { get; set; }
+        // Durable storage in Postgres (see comment on Proposal.DocumentBytes).
+        public byte[]? SubmissionBytes { get; set; }
 
         // Navigation properties
         public Project? Project { get; set; }

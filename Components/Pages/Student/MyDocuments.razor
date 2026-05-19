@@ -97,7 +97,7 @@ else
       UploadedAt = d.UploadedAt,
       UploadedBy = memberNames.TryGetValue(d.UploadedById, out var userName) ? userName : "Group Member",
       SizeLabel = FormatSize(d.FileSizeBytes),
-      Url = NormalizePath(d.FilePath)
+      Url = $"/files/document/{d.Id}"
     }));
 
     var proposalDocs = await Db.Proposals
@@ -112,7 +112,7 @@ else
       UploadedAt = p.DocumentUploadedAt ?? p.UpdatedAt,
       UploadedBy = memberNames.TryGetValue(p.StudentId, out var studentName) ? studentName : "Team Lead",
       SizeLabel = "-",
-      Url = NormalizePath(p.DocumentPath!)
+      Url = $"/files/proposal/{p.Id}"
     }));
 
     var milestoneDocs = await Db.Milestones
@@ -129,7 +129,7 @@ else
         ? submitter
         : "Group Member",
       SizeLabel = "-",
-      Url = NormalizePath(m.SubmissionFilePath!)
+      Url = $"/files/milestone/{m.Id}"
     }));
 
     _rows = _rows

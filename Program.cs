@@ -250,6 +250,79 @@ app.MapPost("/auth/reset-password-supabase", async (HttpContext httpContext, Pas
     return Results.Redirect("/?reset=success", false);
 }).DisableAntiforgery();
 
+// ───────────────────────────────────────────────────────────────────────────
+// File-download endpoints — serve user-uploaded content from the database so
+// it survives Azure App Service redeploys (which wipe wwwroot uploads).
+// Each endpoint prefers the bytea column; falls back to wwwroot/<path> for
+// legacy rows that pre-date the columns.
+// ───────────────────────────────────────────────────────────────────────────
+
+static string GuessContentType(string? fileName)
+{
+    var ext = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
+    return ext switch
+    {
+        ".pdf" => "application/pdf",
+        ".doc" => "application/msword",
+        ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".zip" => "application/zip",
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        _ => "application/octet-stream"
+    };
+}
+
+static IResult ServeFromBytesOrDisk(byte[]? bytes, string? relativePath, string? fileName, IWebHostEnvironment env)
+{
+    if (bytes != null && bytes.Length > 0)
+    {
+        return Results.File(bytes, GuessContentType(fileName), fileDownloadName: fileName);
+    }
+
+    if (!string.IsNullOrWhiteSpace(relativePath))
+    {
+        var trimmed = relativePath.Replace('\\', '/').TrimStart('/');
+        var full = Path.Combine(env.WebRootPath, trimmed);
+        if (File.Exists(full))
+        {
+            var disk = File.OpenRead(full);
+            return Results.File(disk, GuessContentType(fileName), fileDownloadName: fileName);
+        }
+    }
+
+    return Results.NotFound();
+}
+
+app.MapGet("/files/proposal/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+{
+    var p = await db.Proposals
+        .Where(x => x.Id == id)
+        .Select(x => new { x.DocumentBytes, x.DocumentPath, x.DocumentName })
+        .FirstOrDefaultAsync();
+    if (p == null) return Results.NotFound();
+    return ServeFromBytesOrDisk(p.DocumentBytes, p.DocumentPath, p.DocumentName ?? $"proposal-{id}.pdf", env);
+}).RequireAuthorization();
+
+app.MapGet("/files/milestone/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+{
+    var m = await db.Milestones
+        .Where(x => x.Id == id)
+        .Select(x => new { x.SubmissionBytes, x.SubmissionFilePath, x.SubmissionFileName })
+        .FirstOrDefaultAsync();
+    if (m == null) return Results.NotFound();
+    return ServeFromBytesOrDisk(m.SubmissionBytes, m.SubmissionFilePath, m.SubmissionFileName ?? $"milestone-{id}.pdf", env);
+}).RequireAuthorization();
+
+app.MapGet("/files/document/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+{
+    var d = await db.Documents
+        .Where(x => x.Id == id)
+        .Select(x => new { x.Content, x.FilePath, x.FileName })
+        .FirstOrDefaultAsync();
+    if (d == null) return Results.NotFound();
+    return ServeFromBytesOrDisk(d.Content, d.FilePath, d.FileName, env);
+}).RequireAuthorization();
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

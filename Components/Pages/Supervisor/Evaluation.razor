@@ -87,7 +87,7 @@ else
                                                     @if (item.HasSubmission)
                                                     {
                                                         <a class="btn btn-sm btn-soft eval-submission-btn"
-                                                           href="@item.SubmissionFilePath"
+                                                           href="@($"/files/milestone/{item.Id}")"
                                                            target="_blank" rel="noopener"
                                                            title="@(item.SubmissionFileName ?? "Open submission")">
                                                             <i class="bi bi-paperclip"></i>

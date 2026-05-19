@@ -37,23 +37,30 @@ namespace FYP_AutomationSystem.Services
                 if (project == null || user == null)
                     return null;
 
-                // Create upload directory if it doesn't exist
-                var uploadDir = Path.Combine(_environment.WebRootPath, "uploads", projectId.ToString());
-                if (!Directory.Exists(uploadDir))
-                    Directory.CreateDirectory(uploadDir);
-
-                // Generate unique filename
-                var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
-                var filePath = Path.Combine(uploadDir, fileName);
-                var relativePath = Path.Combine("uploads", projectId.ToString(), fileName);
-
-                // Save file
-                using (var stream = new FileStream(filePath, FileMode.Create))
+                // Read once into memory: store in Postgres (durable on Azure)
+                // and also try to mirror to wwwroot for local dev.
+                byte[] bytes;
+                using (var ms = new MemoryStream())
                 {
-                    await file.CopyToAsync(stream);
+                    await file.CopyToAsync(ms);
+                    bytes = ms.ToArray();
                 }
 
-                // Create document record
+                var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
+                var relativePath = Path.Combine("uploads", projectId.ToString(), fileName);
+
+                try
+                {
+                    var uploadDir = Path.Combine(_environment.WebRootPath, "uploads", projectId.ToString());
+                    if (!Directory.Exists(uploadDir))
+                        Directory.CreateDirectory(uploadDir);
+                    await File.WriteAllBytesAsync(Path.Combine(uploadDir, fileName), bytes);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Document disk-copy skipped: {ex.Message}");
+                }
+
                 var document = new Document
                 {
                     FileName = file.FileName,
@@ -63,7 +70,8 @@ namespace FYP_AutomationSystem.Services
                     Version = 1,
                     ProjectId = projectId,
                     UploadedById = uploadedById,
-                    UploadedAt = DateTime.UtcNow
+                    UploadedAt = DateTime.UtcNow,
+                    Content = bytes
                 };
 
                 _context.Documents.Add(document);

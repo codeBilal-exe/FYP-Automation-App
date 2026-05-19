@@ -69,7 +69,7 @@ else
               <div class="small text-success">Submitted on @m.SubmittedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
               @if (!string.IsNullOrWhiteSpace(m.SubmissionFilePath))
               {
-                <div class="small"><a href="@m.SubmissionFilePath" target="_blank">Open Uploaded File</a></div>
+                <div class="small"><a href="@($"/files/milestone/{m.Id}")" target="_blank">Open Uploaded File</a></div>
               }
               @if (!string.IsNullOrWhiteSpace(m.SubmissionNotes))
               {

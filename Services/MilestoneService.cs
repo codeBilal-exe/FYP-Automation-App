@@ -247,14 +247,26 @@ namespace FYP_AutomationSystem.Services
                 return (false, "Submission file size exceeds 15 MB limit.");
             }
 
-            var dir = Path.Combine(_environment.WebRootPath, "uploads", "milestones", milestoneId.ToString());
-            Directory.CreateDirectory(dir);
-            var serverFile = $"{Guid.NewGuid():N}{ext}";
-            var fullPath = Path.Combine(dir, serverFile);
+            // Read once into memory: persist to Postgres for durability + write
+            // to wwwroot for local dev convenience.
+            byte[] bytes;
             await using (var source = file.OpenReadStream(MaxSubmissionBytes))
-            await using (var target = File.Create(fullPath))
+            await using (var ms = new MemoryStream())
             {
-                await source.CopyToAsync(target);
+                await source.CopyToAsync(ms);
+                bytes = ms.ToArray();
+            }
+
+            var serverFile = $"{Guid.NewGuid():N}{ext}";
+            try
+            {
+                var dir = Path.Combine(_environment.WebRootPath, "uploads", "milestones", milestoneId.ToString());
+                Directory.CreateDirectory(dir);
+                await File.WriteAllBytesAsync(Path.Combine(dir, serverFile), bytes);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Milestone disk-copy skipped: {ex.Message}");
             }
 
             milestone.SubmissionFilePath = $"/uploads/milestones/{milestoneId}/{serverFile}";
@@ -262,6 +274,7 @@ namespace FYP_AutomationSystem.Services
             milestone.SubmissionNotes = notes?.Trim();
             milestone.SubmittedAt = DateTime.UtcNow;
             milestone.SubmittedByStudentId = studentId;
+            milestone.SubmissionBytes = bytes;
             milestone.Status = MilestoneStatus.Completed;
             milestone.ProgressPercent = 100;
 

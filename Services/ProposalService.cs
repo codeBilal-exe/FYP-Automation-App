@@ -120,32 +120,45 @@ namespace FYP_AutomationSystem.Services
             return proposal;
         }
 
-        public async Task<(bool Success, string Message, string? SavedPath, string? SavedName)> SaveProposalDocumentAsync(IBrowserFile file)
+        public async Task<(bool Success, string Message, string? SavedPath, string? SavedName, byte[]? Bytes)> SaveProposalDocumentAsync(IBrowserFile file)
         {
             if (file == null)
-                return (false, "No file selected.", null, null);
+                return (false, "No file selected.", null, null, null);
 
             var ext = Path.GetExtension(file.Name)?.ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(ext) || !AllowedProposalExtensions.Contains(ext))
-                return (false, "Invalid file type. Only PDF, DOC, DOCX are allowed.", null, null);
+                return (false, "Invalid file type. Only PDF, DOC, DOCX are allowed.", null, null, null);
 
             if (file.Size <= 0 || file.Size > MaxProposalDocumentBytes)
-                return (false, "File exceeds max size of 10 MB.", null, null);
+                return (false, "File exceeds max size of 10 MB.", null, null, null);
 
-            var uploadsRoot = Path.Combine(_environment.WebRootPath, "uploads", "proposals");
-            Directory.CreateDirectory(uploadsRoot);
+            // Read once into memory so we can both persist to Postgres (durable
+            // on Azure App Service) and write to wwwroot for local dev.
+            byte[] bytes;
+            await using (var source = file.OpenReadStream(MaxProposalDocumentBytes))
+            await using (var ms = new MemoryStream())
+            {
+                await source.CopyToAsync(ms);
+                bytes = ms.ToArray();
+            }
 
             var safeName = $"{Guid.NewGuid():N}{ext}";
-            var fullPath = Path.Combine(uploadsRoot, safeName);
-
-            await using (var source = file.OpenReadStream(MaxProposalDocumentBytes))
-            await using (var target = File.Create(fullPath))
+            try
             {
-                await source.CopyToAsync(target);
+                var uploadsRoot = Path.Combine(_environment.WebRootPath, "uploads", "proposals");
+                Directory.CreateDirectory(uploadsRoot);
+                var fullPath = Path.Combine(uploadsRoot, safeName);
+                await File.WriteAllBytesAsync(fullPath, bytes);
+            }
+            catch (Exception ex)
+            {
+                // Filesystem may be read-only (e.g. Azure Run-From-Package).
+                // The DB copy is still authoritative, so we proceed.
+                Console.WriteLine($"Proposal disk-copy skipped: {ex.Message}");
             }
 
             var relativePath = $"/uploads/proposals/{safeName}";
-            return (true, "File uploaded.", relativePath, file.Name);
+            return (true, "File uploaded.", relativePath, file.Name, bytes);
         }
 
         public async Task<(bool Success, string Message, Proposal? Proposal)> SaveOrSubmitGroupProposalAsync(
@@ -204,6 +217,10 @@ namespace FYP_AutomationSystem.Services
             proposal.DocumentPath = payload.DocumentPath;
             proposal.DocumentName = payload.DocumentName;
             proposal.DocumentUploadedAt = payload.DocumentUploadedAt;
+            if (payload.DocumentBytes != null)
+            {
+                proposal.DocumentBytes = payload.DocumentBytes;
+            }
             proposal.RejectionReason = null;
             proposal.ReviewerComments = null;
             proposal.Status = targetStatus;

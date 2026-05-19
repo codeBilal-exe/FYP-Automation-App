@@ -77,7 +77,7 @@
     <div class="mb-3"><strong>Document</strong>
       @if (!string.IsNullOrWhiteSpace(_selected.DocumentPath))
       {
-        <div><a class="btn btn-sm btn-soft" href="@_selected.DocumentPath" target="_blank">Download / View Document</a></div>
+        <div><a class="btn btn-sm btn-soft" href="@($"/files/proposal/{_selected.Id}")" target="_blank">Download / View Document</a></div>
       }
       else
       {

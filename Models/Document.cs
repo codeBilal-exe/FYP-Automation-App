@@ -11,5 +11,7 @@ namespace FYP_AutomationSystem.Models
         public int ProjectId { get; set; }
         public int UploadedById { get; set; }
         public DateTime UploadedAt { get; set; }
+        // Durable storage in Postgres (see Proposal.DocumentBytes).
+        public byte[]? Content { get; set; }
     }
 }

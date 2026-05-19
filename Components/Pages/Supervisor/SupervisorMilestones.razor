@@ -105,7 +105,7 @@ else
                     <div class="fw-semibold text-success">Submitted: @m.SubmittedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
                     @if (!string.IsNullOrWhiteSpace(m.SubmissionFilePath))
                     {
-                        <div class="mt-2"><a class="btn btn-primary" href="@m.SubmissionFilePath" target="_blank">Open Submission</a></div>
+                        <div class="mt-2"><a class="btn btn-primary" href="@($"/files/milestone/{m.Id}")" target="_blank">Open Submission</a></div>
                     }
                     @if (!string.IsNullOrWhiteSpace(m.SubmissionNotes))
                     {

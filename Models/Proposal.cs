@@ -18,6 +18,9 @@ namespace FYP_AutomationSystem.Models
         public string? DocumentPath { get; set; }
         public string? DocumentName { get; set; }
         public DateTime? DocumentUploadedAt { get; set; }
+        // Durable storage: the file bytes live in Postgres so they survive
+        // Azure App Service redeploys (which wipe wwwroot uploads).
+        public byte[]? DocumentBytes { get; set; }
 
         public bool ApprovedByCoordinator { get; set; }
         public bool ApprovedByHOD { get; set; }

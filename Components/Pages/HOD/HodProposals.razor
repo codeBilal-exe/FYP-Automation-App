@@ -37,7 +37,7 @@
               <div class="fw-semibold">@row.Proposal.Title</div>
               @if (!string.IsNullOrWhiteSpace(row.Proposal.DocumentPath))
               {
-                <div class="small"><a href="@row.Proposal.DocumentPath" target="_blank">Download / View Document</a></div>
+                <div class="small"><a href="@($"/files/proposal/{row.Proposal.Id}")" target="_blank">Download / View Document</a></div>
               }
             </td>
             <td>@row.GroupName</td>
