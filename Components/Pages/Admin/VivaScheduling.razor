@@ -30,53 +30,64 @@
   }
   else
   {
-    <table class="ftable">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Time Slot</th>
-          <th>Type</th>
-          <th>Group</th>
-          <th>Venue</th>
-          <th>Panel Members</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @foreach (var s in FilteredSlots)
-        {
-          <tr>
-            <td>@s.ScheduledAt.ToString("ddd, MMM dd yyyy")</td>
-            <td><span class="fbadge info">@FormatTime(s.StartTime) – @FormatTime(s.EndTime)</span></td>
-            <td><span class="fbadge @SlotTypeClass(s.SlotType)">@s.SlotType</span></td>
-            <td>@(s.Group?.GroupName ?? "—")</td>
-            <td>@s.Venue</td>
-            <td>
+    <div class="viva-card-grid">
+      @foreach (var s in FilteredSlots)
+      {
+        <article class="viva-card">
+          <header class="viva-card-head">
+            <div class="viva-card-day">
+              <div class="viva-card-dow">@s.ScheduledAt.ToString("ddd")</div>
+              <div class="viva-card-date">@s.ScheduledAt.ToString("dd")</div>
+              <div class="viva-card-month">@s.ScheduledAt.ToString("MMM yyyy")</div>
+            </div>
+            <div class="viva-card-meta">
+              <div class="viva-card-time">
+                <i class="bi bi-clock"></i>
+                <span>@FormatTime(s.StartTime) – @FormatTime(s.EndTime)</span>
+              </div>
+              <div class="viva-card-badges">
+                <span class="fbadge @SlotTypeClass(s.SlotType)">@s.SlotType</span>
+                <span class="fbadge @(s.Status.ToString().ToLower())">@s.Status</span>
+              </div>
+            </div>
+            <div class="viva-card-actions">
+              @if (s.Status == VivaStatus.Scheduled)
+              {
+                <button class="btn btn-sm btn-soft" title="Edit" @onclick="() => EditSlot(s)"><i class="bi bi-pencil"></i></button>
+              }
+              <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => DeleteSlot(s)"><i class="bi bi-trash"></i></button>
+            </div>
+          </header>
+
+          <div class="viva-card-body">
+            <div class="viva-card-row">
+              <span class="viva-card-label"><i class="bi bi-people"></i> Group</span>
+              <span class="viva-card-value">@(s.Group?.GroupName ?? "—")</span>
+            </div>
+            <div class="viva-card-row">
+              <span class="viva-card-label"><i class="bi bi-geo-alt"></i> Venue</span>
+              <span class="viva-card-value">@s.Venue</span>
+            </div>
+            <div class="viva-card-panel">
+              <div class="viva-card-label mb-1"><i class="bi bi-person-badge"></i> Panel</div>
               @if (s.PanelMembers.Count == 0)
               {
-                <span class="text-muted">None</span>
+                <span class="text-muted small">No panel assigned</span>
               }
               else
               {
-                @foreach (var pm in s.PanelMembers)
-                {
-                  <span class="viva-panel-chip">@pm.FullName</span>
-                }
+                <div class="viva-card-chips">
+                  @foreach (var pm in s.PanelMembers)
+                  {
+                    <span class="viva-panel-chip">@pm.FullName</span>
+                  }
+                </div>
               }
-            </td>
-            <td><span class="fbadge @(s.Status.ToString().ToLower())">@s.Status</span></td>
-            <td>
-              @if (s.Status == VivaStatus.Scheduled)
-              {
-                <button class="btn btn-sm btn-outline-primary me-1" title="Edit" @onclick="() => EditSlot(s)"><i class="bi bi-pencil"></i></button>
-              }
-              <button class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => DeleteSlot(s)"><i class="bi bi-trash"></i></button>
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
   }
 </div>
 
@@ -711,5 +722,146 @@
     border-radius: 8px;
     font-size: .85rem;
     margin-bottom: .75rem;
+  }
+
+  /* Scheduled-slot cards */
+  .viva-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 1rem;
+    margin-top: .5rem;
+  }
+  .viva-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1rem 1.1rem 1.1rem;
+    transition: transform .25s var(--ease-out, ease), box-shadow .25s var(--ease-out, ease), border-color .25s var(--ease-out, ease);
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+  }
+  .viva-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent-soft);
+    box-shadow: var(--shadow);
+  }
+  .viva-card-head {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: .9rem;
+    align-items: center;
+  }
+  .viva-card-day {
+    width: 60px;
+    text-align: center;
+    background: var(--paper-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: .35rem .25rem .4rem;
+    line-height: 1.1;
+  }
+  .viva-card-dow {
+    font-size: .65rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .viva-card-date {
+    font-family: var(--font-display, Georgia, serif);
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1;
+    margin: 2px 0 1px;
+  }
+  .viva-card-month {
+    font-size: .62rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .viva-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    min-width: 0;
+  }
+  .viva-card-time {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-weight: 600;
+    color: var(--ink);
+    font-size: .9rem;
+    font-feature-settings: "tnum";
+  }
+  .viva-card-time i { color: var(--accent); font-size: .85rem; }
+  .viva-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+  }
+  .viva-card-actions {
+    display: flex;
+    gap: .3rem;
+    align-self: start;
+  }
+  .viva-card-actions .btn { padding: .25rem .45rem; }
+
+  .viva-card-body {
+    border-top: 1px dashed var(--border);
+    padding-top: .85rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+  }
+  .viva-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+    min-height: 1.5rem;
+  }
+  .viva-card-label {
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    white-space: nowrap;
+  }
+  .viva-card-label i { color: var(--accent); font-size: .82rem; }
+  .viva-card-value {
+    color: var(--ink);
+    font-weight: 500;
+    font-size: .88rem;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .viva-card-panel { display: flex; flex-direction: column; }
+  .viva-card-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+  }
+  .viva-card .viva-panel-chip {
+    background: var(--accent-tint);
+    color: var(--accent-deep);
+    border: 1px solid transparent;
+    margin: 0;
+  }
+
+  @@media (max-width: 540px) {
+    .viva-card-head { grid-template-columns: auto 1fr; }
+    .viva-card-actions { grid-column: 1 / -1; justify-content: flex-end; }
+    .viva-card-value { text-align: left; }
   }
 </style>

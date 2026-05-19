@@ -13,5 +13,13 @@ namespace FYP_AutomationSystem.Models
         public decimal? ExistingMarks { get; set; }
         public string? ExistingComment { get; set; }
         public bool IsEvaluated => ExistingMarks.HasValue;
+
+        // Milestone submission (populated only for Type == "Milestone")
+        public string? SubmissionFilePath { get; set; }
+        public string? SubmissionFileName { get; set; }
+        public string? SubmissionNotes { get; set; }
+        public DateTime? SubmittedAt { get; set; }
+
+        public bool HasSubmission => !string.IsNullOrWhiteSpace(SubmissionFilePath);
     }
 }

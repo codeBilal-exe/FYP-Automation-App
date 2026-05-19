@@ -84,7 +84,11 @@ namespace FYP_AutomationSystem.Services
                         Status = milestone.Status.ToString(),
                         CanEvaluate = true,
                         ExistingMarks = existing?.Marks,
-                        ExistingComment = existing?.Comment
+                        ExistingComment = existing?.Comment,
+                        SubmissionFilePath = milestone.SubmissionFilePath,
+                        SubmissionFileName = milestone.SubmissionFileName,
+                        SubmissionNotes = milestone.SubmissionNotes,
+                        SubmittedAt = milestone.SubmittedAt
                     });
                 }
 

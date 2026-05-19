@@ -69,6 +69,7 @@ else
                                             <th>Title</th>
                                             <th>Due</th>
                                             <th>Status</th>
+                                            <th style="width: 180px;">Submission</th>
                                             <th style="width: 140px;">Action</th>
                                         </tr>
                                     </thead>
@@ -83,6 +84,26 @@ else
                                                 <td>@FormatDate(item.ScheduledDate)</td>
                                                 <td>@item.Status</td>
                                                 <td>
+                                                    @if (item.HasSubmission)
+                                                    {
+                                                        <a class="btn btn-sm btn-soft eval-submission-btn"
+                                                           href="@item.SubmissionFilePath"
+                                                           target="_blank" rel="noopener"
+                                                           title="@(item.SubmissionFileName ?? "Open submission")">
+                                                            <i class="bi bi-paperclip"></i>
+                                                            <span>Open submission</span>
+                                                        </a>
+                                                        @if (item.SubmittedAt.HasValue)
+                                                        {
+                                                            <div class="text-muted small mt-1">Submitted @item.SubmittedAt.Value.ToString("dd MMM yyyy")</div>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted small">No submission</span>
+                                                    }
+                                                </td>
+                                                <td>
                                                     <button class="btn btn-sm @(item.IsEvaluated ? "btn-warning" : "btn-primary")" @onclick="() => OpenRow(item)">
                                                         @(item.IsEvaluated ? "Update" : "Evaluate")
                                                     </button>
@@ -92,7 +113,14 @@ else
                                             @if (rowOpen)
                                             {
                                                 <tr class="table-light">
-                                                    <td colspan="4">
+                                                    <td colspan="5">
+                                                        @if (item.HasSubmission && !string.IsNullOrWhiteSpace(item.SubmissionNotes))
+                                                        {
+                                                            <div class="eval-submission-notes mb-2">
+                                                                <div class="small text-muted"><strong>Student's notes:</strong></div>
+                                                                <div class="small">@item.SubmissionNotes</div>
+                                                            </div>
+                                                        }
                                                         <div class="row g-2 align-items-end">
                                                             <div class="col-md-3">
                                                                 <label class="form-label mb-1">Marks</label>
@@ -414,3 +442,25 @@ else
         return date.HasValue ? date.Value.ToString("dd MMM yyyy") : "N/A";
     }
 }
+
+<style>
+  .eval-submission-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .78rem;
+    padding: .3rem .65rem;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .eval-submission-btn i { font-size: .9rem; color: var(--accent); }
+  .eval-submission-btn:hover i { color: #fff; }
+  .eval-submission-notes {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: .55rem .8rem;
+  }
+</style>
+
