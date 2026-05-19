@@ -49,6 +49,18 @@ namespace FYP_AutomationSystem.Services
                         projectIds.Contains(v.ProjectId))
                     .ToListAsync();
 
+                // Drop "shadow" milestones — every viva-shaped slot (Viva,
+                // Presentation, Evaluation, DocumentSubmission) auto-creates a
+                // Milestone for scheduling housekeeping. The viva itself is the
+                // evaluation target, so we must not show that milestone too.
+                var shadowMilestoneIds = vivas
+                    .Where(v => v.MilestoneId.HasValue)
+                    .Select(v => v.MilestoneId!.Value)
+                    .ToHashSet();
+                milestones = milestones
+                    .Where(m => !shadowMilestoneIds.Contains(m.Id))
+                    .ToList();
+
                 var milestoneIds = milestones.Select(m => m.Id).ToList();
                 var vivaIds = vivas.Select(v => v.Id).ToList();
 
@@ -134,13 +146,15 @@ namespace FYP_AutomationSystem.Services
         {
             try
             {
+                // Panel members can submit remarks for ANY viva-shaped slot
+                // they're assigned to, regardless of viva Status — the supervisor
+                // owns the marks, the panel owns qualitative remarks.
                 var vivas = await _context.VivaSlots
                     .AsNoTracking()
                     .Include(v => v.Group)
                     .Include(v => v.Milestone)
                     .Include(v => v.PanelMembers)
-                    .Where(v => v.Status == VivaStatus.Completed &&
-                                v.PanelMembers.Any(p => p.Id == panelMemberId))
+                    .Where(v => v.PanelMembers.Any(p => p.Id == panelMemberId))
                     .OrderBy(v => v.ScheduledAt)
                     .ToListAsync();
 
@@ -157,14 +171,13 @@ namespace FYP_AutomationSystem.Services
                     .ToDictionaryAsync(p => p.Id, p => p.Group);
 
                 var vivaIds = vivas.Select(v => v.Id).ToList();
-                var existingEvaluations = await _context.Evaluations
-                    .AsNoTracking()
-                    .Where(e => e.EvaluatorId == panelMemberId &&
-                                e.ItemType == "Viva" &&
-                                vivaIds.Contains(e.ItemId))
-                    .ToListAsync();
 
-                var existingById = existingEvaluations.ToDictionary(e => e.ItemId, e => e);
+                // Existing remarks by this panel member, keyed by viva id.
+                var myRemarks = await _context.PanelRemarks
+                    .AsNoTracking()
+                    .Where(r => r.PanelMemberId == panelMemberId && vivaIds.Contains(r.VivaSlotId))
+                    .ToDictionaryAsync(r => r.VivaSlotId, r => r);
+
                 var items = new List<EvaluationItemDto>();
 
                 foreach (var viva in vivas)
@@ -181,7 +194,7 @@ namespace FYP_AutomationSystem.Services
                         continue;
                     }
 
-                    existingById.TryGetValue(viva.Id, out var existing);
+                    myRemarks.TryGetValue(viva.Id, out var existingRemark);
                     items.Add(new EvaluationItemDto
                     {
                         Id = viva.Id,
@@ -192,8 +205,9 @@ namespace FYP_AutomationSystem.Services
                         ScheduledDate = viva.ScheduledAt,
                         Status = viva.Status.ToString(),
                         CanEvaluate = true,
-                        ExistingMarks = existing?.Marks,
-                        ExistingComment = existing?.Comment
+                        // ExistingComment is repurposed here to hold the panel
+                        // member's saved remark — there's no marks for panel.
+                        ExistingComment = existingRemark?.Remarks
                     });
                 }
 
@@ -206,6 +220,127 @@ namespace FYP_AutomationSystem.Services
             {
                 Console.WriteLine($"GetPanelEvaluationItemsAsync error: {ex.Message}");
                 return new List<EvaluationItemDto>();
+            }
+        }
+
+        /// <summary>
+        /// Upserts a panel member's qualitative remark for a viva-shaped slot.
+        /// Panel members never enter marks — that's the supervisor's job.
+        /// </summary>
+        public async Task<(bool Success, string? ErrorMessage)> SavePanelRemarkAsync(
+            int panelMemberId,
+            int vivaSlotId,
+            string remarks)
+        {
+            try
+            {
+                var trimmed = (remarks ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    return (false, "Please enter remarks before saving.");
+                }
+                if (trimmed.Length > 1000)
+                {
+                    return (false, "Remarks must be 1000 characters or fewer.");
+                }
+
+                var viva = await _context.VivaSlots
+                    .Include(v => v.PanelMembers)
+                    .Include(v => v.Group)
+                    .FirstOrDefaultAsync(v => v.Id == vivaSlotId);
+                if (viva == null)
+                {
+                    return (false, "Viva slot not found.");
+                }
+
+                if (!viva.PanelMembers.Any(p => p.Id == panelMemberId))
+                {
+                    return (false, "You are not assigned as a panel member for this viva.");
+                }
+
+                var group = viva.Group;
+                if (group == null)
+                {
+                    var project = await _context.Projects
+                        .Include(p => p.Group)
+                        .FirstOrDefaultAsync(p => p.Id == viva.ProjectId);
+                    group = project?.Group;
+                }
+                if (group == null)
+                {
+                    return (false, "Group for this viva could not be resolved.");
+                }
+
+                var existing = await _context.PanelRemarks
+                    .FirstOrDefaultAsync(r => r.VivaSlotId == vivaSlotId && r.PanelMemberId == panelMemberId);
+
+                if (existing != null)
+                {
+                    existing.Remarks = trimmed;
+                    existing.GroupId = group.Id;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    _context.PanelRemarks.Add(new PanelRemark
+                    {
+                        VivaSlotId = vivaSlotId,
+                        PanelMemberId = panelMemberId,
+                        GroupId = group.Id,
+                        Remarks = trimmed,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = null
+                    });
+                }
+
+                await _context.SaveChangesAsync();
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SavePanelRemarkAsync error: {ex.Message}");
+                return (false, "Unable to save remarks at the moment.");
+            }
+        }
+
+        /// <summary>
+        /// Bulk-fetch panel remarks for a set of vivas. Keyed by VivaSlotId.
+        /// </summary>
+        public async Task<Dictionary<int, List<PanelRemarkDto>>> GetPanelRemarksForVivasAsync(IEnumerable<int> vivaIds)
+        {
+            try
+            {
+                var ids = vivaIds.Distinct().ToList();
+                if (ids.Count == 0)
+                {
+                    return new Dictionary<int, List<PanelRemarkDto>>();
+                }
+
+                var rows = await _context.PanelRemarks
+                    .AsNoTracking()
+                    .Include(r => r.PanelMember)
+                    .Where(r => ids.Contains(r.VivaSlotId))
+                    .ToListAsync();
+
+                return rows
+                    .GroupBy(r => r.VivaSlotId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(r => new PanelRemarkDto
+                        {
+                            VivaSlotId = r.VivaSlotId,
+                            PanelMemberId = r.PanelMemberId,
+                            PanelMemberName = r.PanelMember?.FullName ?? "Panel Member",
+                            Remarks = r.Remarks,
+                            SavedAt = r.UpdatedAt ?? r.CreatedAt
+                        })
+                        .OrderBy(x => x.SavedAt)
+                        .ToList());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GetPanelRemarksForVivasAsync error: {ex.Message}");
+                return new Dictionary<int, List<PanelRemarkDto>>();
             }
         }
 
@@ -410,6 +545,18 @@ namespace FYP_AutomationSystem.Services
                     .OrderBy(e => e.EvaluatedAt)
                     .ToListAsync();
 
+                // Mirror supervisor evaluation: filter out shadow milestones so
+                // a viva isn't shown twice on the student's result page.
+                var shadowMilestoneIdsForResult = vivas
+                    .Where(v => v.MilestoneId.HasValue)
+                    .Select(v => v.MilestoneId!.Value)
+                    .ToHashSet();
+                milestones = milestones
+                    .Where(m => !shadowMilestoneIdsForResult.Contains(m.Id))
+                    .ToList();
+
+                var remarksByViva = await GetPanelRemarksForVivasAsync(vivas.Select(v => v.Id));
+
                 var taskResults = new List<TaskResultDto>();
 
                 foreach (var milestone in milestones)
@@ -427,6 +574,7 @@ namespace FYP_AutomationSystem.Services
 
                     taskResults.Add(new TaskResultDto
                     {
+                        ItemId = milestone.Id,
                         Type = "Milestone",
                         Title = milestone.Title,
                         Date = milestone.DueDate,
@@ -449,10 +597,12 @@ namespace FYP_AutomationSystem.Services
 
                     taskResults.Add(new TaskResultDto
                     {
+                        ItemId = viva.Id,
                         Type = "Viva",
                         Title = BuildVivaTitle(viva),
                         Date = viva.ScheduledAt,
-                        Marks = marks
+                        Marks = marks,
+                        PanelRemarks = remarksByViva.TryGetValue(viva.Id, out var pr) ? pr : new List<PanelRemarkDto>()
                     });
                 }
 

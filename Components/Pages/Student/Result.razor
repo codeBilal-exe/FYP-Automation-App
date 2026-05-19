@@ -154,6 +154,27 @@ else
                     </tbody>
                 </table>
             </div>
+
+            @{
+                var vivasWithRemarks = vivaTasks.Where(t => t.PanelRemarks.Any()).ToList();
+            }
+            @if (vivasWithRemarks.Any())
+            {
+                <h6 class="mt-4">Panel Remarks</h6>
+                @foreach (var task in vivasWithRemarks)
+                {
+                    <div class="result-remarks-card fcard mb-3">
+                        <div class="result-remarks-title">@task.Title <span class="text-muted small ms-2">@FormatDate(task.Date)</span></div>
+                        @foreach (var r in task.PanelRemarks)
+                        {
+                            <div class="result-remark-row">
+                                <div class="result-remark-who"><strong>@r.PanelMemberName</strong><span class="text-muted small ms-2">@r.SavedAt.ToString("dd MMM yyyy HH:mm")</span></div>
+                                <div class="result-remark-text">@r.Remarks</div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
         </div>
 
         <div class="fcard">
@@ -227,3 +248,22 @@ else
         return "bg-danger";
     }
 }
+
+<style>
+  .result-remarks-card { padding: 1rem 1.15rem; }
+  .result-remarks-title {
+    font-family: var(--font-display, Georgia, serif);
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--ink);
+    margin-bottom: .5rem;
+  }
+  .result-remark-row {
+    padding: .5rem 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .result-remark-row:last-child { border-bottom: 0; }
+  .result-remark-who { display: flex; align-items: center; gap: .25rem; }
+  .result-remark-text { color: var(--ink-2); font-size: .9rem; margin-top: .2rem; line-height: 1.45; }
+</style>
+

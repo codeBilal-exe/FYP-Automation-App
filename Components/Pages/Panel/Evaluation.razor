@@ -6,8 +6,8 @@
 
 <div class="page-header">
     <div>
-        <h1>Viva Evaluation</h1>
-        <div class="page-subtitle">Evaluate completed vivas assigned to you.</div>
+        <h1>Panel <em>Remarks</em></h1>
+        <div class="page-subtitle">Submit qualitative remarks for vivas, presentations, and evaluations you're assigned to. Marks are entered by the supervisor.</div>
     </div>
 </div>
 
@@ -26,69 +26,68 @@ else
     {
         <div class="empty-state">
             <i class="bi bi-calendar-x"></i>
-            No completed vivas assigned to you yet.
+            No vivas, presentations, or evaluations are currently assigned to you.
         </div>
     }
     else
     {
         @foreach (var item in _items.OrderBy(i => i.ScheduledDate))
         {
-            var key = GetRowKey(item);
+            var key = item.Id;
             var isSaving = _savingRows.Contains(key);
-            var marksText = GetDraftMarksText(key);
-            var comment = GetDraftComment(key);
-            var savedLabel = item.IsEvaluated
-                ? $"Saved: {item.ExistingMarks:0.#} marks{(string.IsNullOrWhiteSpace(item.ExistingComment) ? string.Empty : $" - \"{item.ExistingComment}\"")}"
-                : null;
+            var draft = GetDraft(key);
+            var otherRemarks = (_remarksByViva.TryGetValue(item.Id, out var list) ? list : new List<PanelRemarkDto>())
+                .Where(r => r.PanelMemberId != _panelMemberId)
+                .ToList();
 
             <div class="fcard mb-3">
-                <div class="fw-semibold">Group: @item.GroupName</div>
-                <div class="text-muted mb-2">Viva: @item.Title - Date: @FormatDate(item.ScheduledDate)</div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <div class="fw-semibold">@item.GroupName</div>
+                        <div class="text-muted small">@item.Title · @FormatDate(item.ScheduledDate)</div>
+                    </div>
+                    <span class="fbadge @(item.Status.ToLowerInvariant())">@item.Status</span>
+                </div>
                 <hr class="mt-2 mb-3" />
 
-                @if (!item.CanEvaluate)
+                <div class="mb-2">
+                    <label class="form-label">Your remarks</label>
+                    <textarea class="form-control"
+                              rows="3"
+                              maxlength="1000"
+                              placeholder="Concise qualitative remarks visible to the student, supervisor, and other panel members."
+                              @oninput="e => UpdateDraft(key, e.Value?.ToString())">@draft</textarea>
+                    <div class="small text-muted text-end">@draft.Length/1000</div>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button class="btn btn-primary"
+                            disabled="@isSaving"
+                            @onclick="() => SaveAsync(item)">
+                        @(isSaving ? "Saving..." : (item.IsRemarked ? "Update remarks" : "Save remarks"))
+                    </button>
+                </div>
+
+                @if (_rowMessages.TryGetValue(key, out var rowMessage) && !string.IsNullOrWhiteSpace(rowMessage))
                 {
-                    <span class="text-muted">Not assigned</span>
+                    <div class="alert @(_rowMessageIsError.Contains(key) ? "alert-danger" : "alert-success") mt-2 mb-0">@rowMessage</div>
                 }
-                else
+
+                @if (otherRemarks.Any())
                 {
-                    <div class="row g-2">
-                        <div class="col-md-3">
-                            <label class="form-label">Marks</label>
-                            <input class="form-control"
-                                   type="number"
-                                   min="0"
-                                   max="100"
-                                   step="0.5"
-                                   value="@marksText"
-                                   @oninput="e => UpdateDraftMarks(key, e.Value?.ToString())" />
-                        </div>
-                        <div class="col-md-9">
-                            <label class="form-label">Comment (optional)</label>
-                            <textarea class="form-control"
-                                      rows="2"
-                                      maxlength="500"
-                                      @oninput="e => UpdateDraftComment(key, e.Value?.ToString())">@comment</textarea>
-                            <div class="small text-muted text-end">@GetCommentLength(key)/500</div>
-                        </div>
+                    <div class="panel-remarks-other mt-3">
+                        <div class="panel-remarks-title">Other panel members</div>
+                        @foreach (var r in otherRemarks)
+                        {
+                            <div class="panel-remark-row">
+                                <div class="panel-remark-who">
+                                    <strong>@r.PanelMemberName</strong>
+                                    <span class="text-muted small ms-2">@r.SavedAt.ToString("dd MMM yyyy HH:mm")</span>
+                                </div>
+                                <div class="panel-remark-text">@r.Remarks</div>
+                            </div>
+                        }
                     </div>
-
-                    <div class="d-flex justify-content-end mt-2">
-                        <button class="btn btn-primary"
-                                disabled="@isSaving"
-                                @onclick="() => SaveAsync(item)">
-                            @(isSaving ? "Saving..." : (item.IsEvaluated ? "Update" : "Save"))
-                        </button>
-                    </div>
-
-                    @if (_rowMessages.TryGetValue(key, out var rowMessage) && !string.IsNullOrWhiteSpace(rowMessage))
-                    {
-                        <div class="alert @(_rowMessageIsError.Contains(key) ? "alert-danger" : "alert-success") mt-2 mb-0">@rowMessage</div>
-                    }
-                    else if (!string.IsNullOrWhiteSpace(savedLabel))
-                    {
-                        <div class="text-success mt-2">Saved: @savedLabel</div>
-                    }
                 }
             </div>
         }
@@ -99,12 +98,24 @@ else
     private bool _isLoading = true;
     private string? _pageError;
     private int _panelMemberId;
-    private List<EvaluationItemDto> _items = new();
-    private readonly Dictionary<int, decimal?> _draftMarks = new();
-    private readonly Dictionary<int, string> _draftComments = new();
+    private List<PanelEvalItem> _items = new();
+    private Dictionary<int, List<PanelRemarkDto>> _remarksByViva = new();
+    private readonly Dictionary<int, string> _drafts = new();
     private readonly Dictionary<int, string> _rowMessages = new();
     private readonly HashSet<int> _rowMessageIsError = new();
     private readonly HashSet<int> _savingRows = new();
+
+    private sealed class PanelEvalItem
+    {
+        public int Id { get; init; }
+        public int GroupId { get; init; }
+        public string GroupName { get; init; } = string.Empty;
+        public string Title { get; init; } = string.Empty;
+        public DateTime? ScheduledDate { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public string? ExistingRemark { get; set; }
+        public bool IsRemarked => !string.IsNullOrWhiteSpace(ExistingRemark);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -123,25 +134,31 @@ else
             if (!int.TryParse(idValue, out _panelMemberId))
             {
                 _pageError = "Unable to resolve current user.";
-                _items = new List<EvaluationItemDto>();
+                _items = new();
                 _isLoading = false;
                 StateHasChanged();
                 return;
             }
 
-            _items = await EvaluationService.GetPanelEvaluationItemsAsync(_panelMemberId);
-            _draftMarks.Clear();
-            _draftComments.Clear();
-            _rowMessages.Clear();
-            _rowMessageIsError.Clear();
-            _savingRows.Clear();
-
-            foreach (var item in _items)
+            var dtos = await EvaluationService.GetPanelEvaluationItemsAsync(_panelMemberId);
+            _items = dtos.Select(d => new PanelEvalItem
             {
-                var key = GetRowKey(item);
-                _draftMarks[key] = item.ExistingMarks;
-                _draftComments[key] = item.ExistingComment ?? string.Empty;
+                Id = d.Id,
+                GroupId = d.GroupId,
+                GroupName = d.GroupName,
+                Title = d.Title,
+                ScheduledDate = d.ScheduledDate,
+                Status = d.Status,
+                ExistingRemark = d.ExistingComment
+            }).ToList();
+
+            _drafts.Clear();
+            foreach (var i in _items)
+            {
+                _drafts[i.Id] = i.ExistingRemark ?? string.Empty;
             }
+
+            _remarksByViva = await EvaluationService.GetPanelRemarksForVivasAsync(_items.Select(i => i.Id));
         }
         catch (Exception ex)
         {
@@ -154,110 +171,70 @@ else
         }
     }
 
-    private void UpdateDraftMarks(int rowKey, string? value)
-    {
-        if (decimal.TryParse(value, out var parsed))
-        {
-            _draftMarks[rowKey] = parsed;
-            return;
-        }
+    private string GetDraft(int id) => _drafts.TryGetValue(id, out var v) ? v : string.Empty;
+    private void UpdateDraft(int id, string? v) => _drafts[id] = v ?? string.Empty;
 
-        _draftMarks[rowKey] = null;
-    }
-
-    private void UpdateDraftComment(int rowKey, string? value)
+    private async Task SaveAsync(PanelEvalItem item)
     {
-        _draftComments[rowKey] = value ?? string.Empty;
-    }
-
-    private string GetDraftMarksText(int rowKey)
-    {
-        return _draftMarks.TryGetValue(rowKey, out var marks) && marks.HasValue
-            ? marks.Value.ToString("0.##")
-            : string.Empty;
-    }
-
-    private string GetDraftComment(int rowKey)
-    {
-        return _draftComments.TryGetValue(rowKey, out var comment) ? comment : string.Empty;
-    }
-
-    private int GetCommentLength(int rowKey)
-    {
-        return GetDraftComment(rowKey).Length;
-    }
-
-    private async Task SaveAsync(EvaluationItemDto item)
-    {
-        var key = GetRowKey(item);
-        _rowMessages[key] = string.Empty;
-        _rowMessageIsError.Remove(key);
-        _savingRows.Add(key);
+        _rowMessages[item.Id] = string.Empty;
+        _rowMessageIsError.Remove(item.Id);
+        _savingRows.Add(item.Id);
         StateHasChanged();
 
         try
         {
-            if (!_draftMarks.TryGetValue(key, out var marks) || !marks.HasValue)
-            {
-                _rowMessages[key] = "Please enter marks before saving.";
-                _rowMessageIsError.Add(key);
-                return;
-            }
-
-            if (marks.Value < 0 || marks.Value > 100)
-            {
-                _rowMessages[key] = "Marks must be between 0 and 100.";
-                _rowMessageIsError.Add(key);
-                return;
-            }
-
-            var comment = GetDraftComment(key);
-            if (comment.Length > 500)
-            {
-                _rowMessages[key] = "Comment cannot exceed 500 characters.";
-                _rowMessageIsError.Add(key);
-                return;
-            }
-
-            var result = await EvaluationService.SaveEvaluationAsync(
-                _panelMemberId,
-                "Panel Member",
-                item.Id,
-                item.Type,
-                marks.Value,
-                string.IsNullOrWhiteSpace(comment) ? null : comment,
-                item.GroupId);
+            var draft = GetDraft(item.Id);
+            var result = await EvaluationService.SavePanelRemarkAsync(_panelMemberId, item.Id, draft);
 
             if (!result.Success)
             {
-                _rowMessages[key] = result.ErrorMessage ?? "Unable to save evaluation.";
-                _rowMessageIsError.Add(key);
+                _rowMessages[item.Id] = result.ErrorMessage ?? "Unable to save remarks.";
+                _rowMessageIsError.Add(item.Id);
                 return;
             }
 
-            item.ExistingMarks = marks.Value;
-            item.ExistingComment = string.IsNullOrWhiteSpace(comment) ? null : comment;
-            _rowMessages[key] = "Saved successfully.";
+            item.ExistingRemark = draft.Trim();
+            _rowMessages[item.Id] = "Saved successfully.";
+
+            // Refresh the cross-member remark list so the new entry shows up.
+            _remarksByViva = await EvaluationService.GetPanelRemarksForVivasAsync(_items.Select(i => i.Id));
         }
         catch (Exception ex)
         {
-            _rowMessages[key] = $"Failed to save: {ex.Message}";
-            _rowMessageIsError.Add(key);
+            _rowMessages[item.Id] = $"Failed to save: {ex.Message}";
+            _rowMessageIsError.Add(item.Id);
         }
         finally
         {
-            _savingRows.Remove(key);
+            _savingRows.Remove(item.Id);
             StateHasChanged();
         }
     }
 
-    private static int GetRowKey(EvaluationItemDto item)
-    {
-        return 2_000_000 + item.Id;
-    }
-
-    private static string FormatDate(DateTime? date)
-    {
-        return date.HasValue ? date.Value.ToString("dd MMM yyyy") : "N/A";
-    }
+    private static string FormatDate(DateTime? date) => date.HasValue ? date.Value.ToString("dd MMM yyyy") : "N/A";
 }
+
+<style>
+  .panel-remarks-other {
+    margin-top: 1rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: .8rem 1rem;
+  }
+  .panel-remarks-title {
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    margin-bottom: .55rem;
+  }
+  .panel-remark-row {
+    padding: .55rem 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .panel-remark-row:last-child { border-bottom: 0; }
+  .panel-remark-who { display: flex; align-items: center; gap: .25rem; }
+  .panel-remark-text { color: var(--ink-2); font-size: .9rem; margin-top: .2rem; line-height: 1.45; }
+</style>

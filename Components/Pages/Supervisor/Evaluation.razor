@@ -199,6 +199,26 @@ else
                                             {
                                                 <tr class="table-light">
                                                     <td colspan="4">
+                                                        @{
+                                                            var panelRemarks = _panelRemarksByViva.TryGetValue(item.Id, out var pr) ? pr : new List<PanelRemarkDto>();
+                                                        }
+                                                        @if (panelRemarks.Any())
+                                                        {
+                                                            <div class="panel-remarks-block mb-3">
+                                                                <div class="panel-remarks-block-title"><i class="bi bi-chat-square-text"></i> Panel remarks</div>
+                                                                @foreach (var r in panelRemarks)
+                                                                {
+                                                                    <div class="panel-remark-row">
+                                                                        <div class="panel-remark-who"><strong>@r.PanelMemberName</strong><span class="text-muted small ms-2">@r.SavedAt.ToString("dd MMM yyyy HH:mm")</span></div>
+                                                                        <div class="panel-remark-text">@r.Remarks</div>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="text-muted small mb-3">No panel remarks yet.</div>
+                                                        }
                                                         <div class="row g-2 align-items-end">
                                                             <div class="col-md-3">
                                                                 <label class="form-label mb-1">Marks</label>
@@ -257,6 +277,7 @@ else
     private readonly Dictionary<int, string> _rowMessages = new();
     private readonly HashSet<int> _rowMessageIsError = new();
     private readonly HashSet<int> _savingRows = new();
+    private Dictionary<int, List<PanelRemarkDto>> _panelRemarksByViva = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -302,6 +323,9 @@ else
                 _draftComments[key] = item.ExistingComment ?? string.Empty;
                 _rowExpanded[key] = false;
             }
+
+            var vivaIds = _items.Where(i => i.Type == "Viva").Select(i => i.Id).ToList();
+            _panelRemarksByViva = await EvaluationService.GetPanelRemarksForVivasAsync(vivaIds);
         }
         catch (Exception ex)
         {
@@ -462,5 +486,28 @@ else
     border-radius: 8px;
     padding: .55rem .8rem;
   }
+  .panel-remarks-block {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .7rem .9rem;
+  }
+  .panel-remarks-block-title {
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    margin-bottom: .5rem;
+    display: flex; align-items: center; gap: .35rem;
+  }
+  .panel-remarks-block-title i { color: var(--accent); font-size: .85rem; }
+  .panel-remark-row {
+    padding: .4rem 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .panel-remark-row:last-child { border-bottom: 0; }
+  .panel-remark-who { display: flex; align-items: center; gap: .25rem; }
+  .panel-remark-text { color: var(--ink-2); font-size: .88rem; margin-top: .15rem; line-height: 1.4; }
 </style>
 

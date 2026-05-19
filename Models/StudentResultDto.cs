@@ -11,10 +11,12 @@ namespace FYP_AutomationSystem.Models
 
     public class TaskResultDto
     {
+        public int ItemId { get; set; }
         public string Type { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public DateTime? Date { get; set; }
         public List<EvaluatorMarkDto> Marks { get; set; } = new();
+        public List<PanelRemarkDto> PanelRemarks { get; set; } = new();
         public decimal AverageMark => Marks.Any() ? Math.Round(Marks.Average(m => m.Marks), 1) : 0;
     }
 
